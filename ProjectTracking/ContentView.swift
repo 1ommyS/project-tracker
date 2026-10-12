@@ -32,20 +32,32 @@ struct ContentView: View {
         }
         .frame(minWidth: 680, minHeight: 520)
         .toolbar {
-            ToolbarItemGroup {
+            ToolbarItemGroup(placement: .navigation) {
                 Button { store.goBack() } label: { Label("Назад", systemImage: "chevron.backward") }
+                    .labelStyle(.iconOnly)
                     .disabled(!store.canGoBack)
                     .help("Назад (⌘[)")
                 Button { store.goForward() } label: { Label("Вперёд", systemImage: "chevron.forward") }
+                    .labelStyle(.iconOnly)
                     .disabled(!store.canGoForward)
                     .help("Вперёд (⌘])")
-                Divider()
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItemGroup {
                 Button { taskEditorForQuickTask() } label: { Label("Новая задача", systemImage: "plus.circle") }
+                    .labelStyle(.iconOnly)
                     .keyboardShortcut("t", modifiers: .command)
+                    .help("Новая задача (⌘T)")
                 Button { showingNewProject = true } label: { Label("Новый проект", systemImage: "plus") }
+                    .labelStyle(.iconOnly)
                     .keyboardShortcut("n", modifiers: .command)
-                Button { store.openRecentProjects() } label: { Label("Недавние", systemImage: "clock") }
+                    .help("Новый проект (⌘N)")
+                Button { store.openRecentProjects() } label: { Label("Недавние проекты", systemImage: "clock") }
+                    .labelStyle(.iconOnly)
+                    .help("Недавние проекты (⌘E)")
                 Button { showingShortcutHelp = true } label: { Label("Горячие клавиши", systemImage: "questionmark.circle") }
+                    .labelStyle(.iconOnly)
+                    .help("Горячие клавиши")
             }
         }
         .sheet(isPresented: $showingNewProject) { NewProjectView() }
@@ -158,7 +170,7 @@ private struct PulseSidebar: View {
                     ForEach(store.activeProjects.groupedByQuarter(), id: \.quarter) { group in
                         DisclosureGroup(isExpanded: quarterBinding(group.quarter)) {
                             ForEach(group.projects) { project in
-                                sidebarProjectRow(project)
+                                SidebarProjectRow(project: project)
                             }
                         } label: {
                             HStack(spacing: 7) {
@@ -191,6 +203,7 @@ private struct PulseSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     }
 
     private func sidebarRow(_ destination: SidebarDestination) -> some View {
@@ -218,13 +231,38 @@ private struct PulseSidebar: View {
         }
     }
 
-    private func sidebarProjectRow(_ project: Project) -> some View {
+    private func quarterBinding(_ quarter: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedQuarters.contains(quarter) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedQuarters.remove(quarter)
+                } else {
+                    collapsedQuarters.insert(quarter)
+                }
+            }
+        )
+    }
+}
+
+/// Строка проекта в сайдбаре: системный hover и выделение,
+/// клик по названию — инлайн-переименование.
+private struct SidebarProjectRow: View {
+    @Environment(AppStore.self) private var store
+    let project: Project
+    @State private var isHovering = false
+
+    private var isSelected: Bool {
+        store.destination == .projects && store.projectsPresentation == .editor && store.selectedProjectID == project.id
+    }
+
+    var body: some View {
         HStack(spacing: 8) {
             Image(systemName: project.state.symbol)
                 .font(.system(size: 11.5, weight: .medium))
                 .frame(width: 18)
                 .foregroundStyle(project.state.color)
-            InlineEditableText(font: .system(size: 13, weight: isProjectSelected(project) ? .medium : .regular),
+            InlineEditableText(font: .system(size: 13, weight: isSelected ? .medium : .regular),
                                tooltip: "Клик — переименовать, по строке — открыть",
                                placeholder: "Проект",
                                text: project.title) { newTitle in
@@ -241,28 +279,14 @@ private struct PulseSidebar: View {
         .padding(.vertical, 1)
         .contentShape(Rectangle())
         .background {
-            if isProjectSelected(project) {
+            if isSelected {
                 RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quaternary)
+            } else if isHovering {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quinary)
             }
         }
         .onTapGesture { store.openProject(project.id) }
-    }
-
-    private func isProjectSelected(_ project: Project) -> Bool {
-        store.destination == .projects && store.projectsPresentation == .editor && store.selectedProjectID == project.id
-    }
-
-    private func quarterBinding(_ quarter: String) -> Binding<Bool> {
-        Binding(
-            get: { !collapsedQuarters.contains(quarter) },
-            set: { isExpanded in
-                if isExpanded {
-                    collapsedQuarters.remove(quarter)
-                } else {
-                    collapsedQuarters.insert(quarter)
-                }
-            }
-        )
+        .onHover { isHovering = $0 }
     }
 }
 

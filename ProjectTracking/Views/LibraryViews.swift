@@ -215,6 +215,7 @@ struct ArchiveView: View {
 
     private func restoreButton(_ project: Project) -> some View {
         Button("Восстановить") { Task { await store.restore(project) } }
+            .buttonStyle(.glass)
     }
 }
 
@@ -254,9 +255,11 @@ struct SettingsView: View {
                         Button("Отправить тестовое напоминание", systemImage: "bell.badge") {
                             Task { await store.notifications.sendTestNotification() }
                         }
+                        .buttonStyle(.glass)
                         Button("Перепланировать напоминания", systemImage: "arrow.triangle.2.circlepath") {
                             Task { await store.notifications.sync(projects: store.projects) }
                         }
+                        .buttonStyle(.glass)
                     } else if store.notifications.authorization != .denied {
                         Button("Разрешить уведомления", systemImage: "bell.badge") {
                             Task {
@@ -264,6 +267,7 @@ struct SettingsView: View {
                                 await store.notifications.syncIfAllowed(projects: store.projects)
                             }
                         }
+                        .buttonStyle(.glass)
                     }
                     if let message = store.notifications.statusMessage {
                         Text(message).font(.caption).foregroundStyle(.secondary)
@@ -288,6 +292,6 @@ struct SettingsView: View {
     }
 
     private var chooseVaultButton: some View {
-        Button("Выбрать…") { Task { await store.chooseVault() } }
+        Button("Выбрать…") { Task { await store.chooseVault() } }.buttonStyle(.glass)
     }
 }
