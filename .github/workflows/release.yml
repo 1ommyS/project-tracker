@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate SemVer tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+
+      - name: Detect release credentials
+        id: credentials
+        env:
+          CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+        run: |
+          if [[ -n "$CERTIFICATE" && -n "$P12_PASSWORD" && -n "$KEYCHAIN_PASSWORD" && -n "$SIGNING_IDENTITY" && -n "$APPLE_TEAM_ID" ]]; then
+            echo "can_sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -n "$CERTIFICATE" && -n "$P12_PASSWORD" && -n "$KEYCHAIN_PASSWORD" && -n "$SIGNING_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_TEAM_ID" && -n "$APP_PASSWORD" ]]; then
+            echo "can_notarize=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_notarize=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import signing certificate
+        if: steps.credentials.outputs.can_sign == 'true'
+        env:
+          CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/pulseboard.keychain-db"
+          echo "$CERTIFICATE" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Build release
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CAN_SIGN: ${{ steps.credentials.outputs.can_sign }}
+        run: |
+          ARGS=(
+            -project "Untitled Project.xcodeproj"
+            -scheme MyApp
+            -configuration Release
+            -destination 'platform=macOS'
+            -derivedDataPath "$RUNNER_TEMP/DerivedData"
+          )
+          if [[ "$CAN_SIGN" == "true" ]]; then
+            xcodebuild "${ARGS[@]}" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" build
+          else
+            xcodebuild "${ARGS[@]}" CODE_SIGNING_ALLOWED=NO build
+          fi
+
+      - name: Notarize and staple app
+        if: steps.credentials.outputs.can_notarize == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+        run: |
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/Pulseboard.app"
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/Pulseboard-notarization.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Pulseboard-notarization.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+
+      - name: Package DMG and ZIP
+        run: |
+          chmod +x scripts/package-release.sh
+          scripts/package-release.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Pulseboard.app" dist
+
+      - name: Notarize and staple DMG
+        if: steps.credentials.outputs.can_notarize == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit dist/Pulseboard.dmg \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
+          xcrun stapler staple dist/Pulseboard.dmg
+          xcrun stapler validate dist/Pulseboard.dmg
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/Pulseboard.zip dist/Pulseboard.dmg --generate-notes --verify-tag
