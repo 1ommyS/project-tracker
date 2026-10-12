@@ -102,7 +102,7 @@ jobs:
           SOURCE=""
           # Цепочка: точное совпадение releases/<version>.md ->
           # последний существующий releases/<n>.md -> CHANGELOG/автоген.
-          for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md"; do
+          for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md" "releases/NEXT.md"; do
             if [[ -f "$candidate" ]]; then
               SOURCE="$candidate"
               break

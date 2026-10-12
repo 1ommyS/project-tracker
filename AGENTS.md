@@ -47,6 +47,6 @@ Concurrency split: views/main actor → `AppStore`, file I/O only through the re
 ## CI / Release gotchas
 
 - CI runs on `macos-26` with Xcode 26; tests must pass with `CODE_SIGNING_ALLOWED=NO`.
-- **Release notes are mandatory**: after editing CHANGELOG.md for a shipped version, ALWAYS run `python3 scripts/sync-release-notes.py` and commit the updated `releases/` files. CI resolves notes as: exact `releases/<version>.md` → latest existing `releases/<n>.md` → CHANGELOG (in-app What's New) / auto-generated (GitHub release).
+- **Release notes are mandatory on EVERY push**: whenever a push touches features or CHANGELOG.md, first update the «Следующий релиз» section in CHANGELOG.md, then ALWAYS run `python3 scripts/sync-release-notes.py` and commit the updated `releases/` (it refreshes `releases/NEXT.md` plus per-version files) in the same commit. CI resolves notes as: exact `releases/<version>.md` → `releases/NEXT.md` → latest existing `releases/<n>.md` → CHANGELOG (in-app What's New) / auto-generated (GitHub release).
 - `release.yml` runs after every successful CI on `main`, auto-tagging `v0.1.<CI run number>`; manual `workflow_dispatch` accepts an explicit SemVer tag. Without GitHub secrets it produces unsigned builds (signing/notarization secrets are listed in README).
 - Local `DerivedData/`, `dist/`, and signing material (`.p12`, profiles) are gitignored — never commit them.
