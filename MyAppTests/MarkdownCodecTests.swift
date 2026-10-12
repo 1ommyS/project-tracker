@@ -1,5 +1,5 @@
 import XCTest
-@testable import Pulseboard
+@testable import PROJECT_Tracking
 
 @MainActor
 final class MarkdownCodecTests: XCTestCase {

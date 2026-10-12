@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct PulseboardApp: App {
+struct ProjectTrackingApp: App {
     @State private var store = AppStore()
 
     var body: some Scene {
@@ -23,10 +23,10 @@ struct PulseboardApp: App {
                 Button("Обновить статус…") { store.openStatusEditor() }.keyboardShortcut(.return, modifiers: [.command, .shift])
             }
             CommandGroup(after: .pasteboard) {
-                Button("Найти в Pulseboard…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
+                Button("Найти в PROJECT Tracking…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
             }
             CommandGroup(replacing: .help) {
-                Button("Горячие клавиши Pulseboard") { store.openShortcutHelp() }
+                Button("Горячие клавиши PROJECT Tracking") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)

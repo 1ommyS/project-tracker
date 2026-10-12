@@ -340,7 +340,7 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
                 BrandIcon(size: 52)
-                VStack(alignment: .leading, spacing: 3) { SectionEyebrow(text: "Pulseboard"); Text("Настройки").font(.largeTitle.bold()); Text("Ваше пространство, ваши правила").foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 3) { SectionEyebrow(text: "PROJECT Tracking"); Text("Настройки").font(.largeTitle.bold()); Text("Ваше пространство, ваши правила").foregroundStyle(.secondary) }
                 Spacer()
             }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 12)
             Form {
@@ -352,7 +352,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 8) { vaultPath; chooseVaultButton }
                         }
                     }
-                    Text("Данные остаются локальными. Можно выбрать корень существующего Obsidian Vault; Pulseboard создаст внутри папку Projects.")
+                    Text("Данные остаются локальными. Можно выбрать корень существующего Obsidian Vault; PROJECT Tracking создаст внутри папку Projects.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Внешний вид") {
