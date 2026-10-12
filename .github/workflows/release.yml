@@ -93,24 +93,36 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      - name: Sync in-app What's New
+      - name: Resolve release notes source
+        id: notes
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           VERSION="${RELEASE_TAG#v}"
           SOURCE=""
-          # Содержимое экрана «Что нового» берём из релизного описания,
-          # а если его нет — из свежей секции CHANGELOG.md.
+          # Цепочка: точное совпадение releases/<version>.md ->
+          # последний существующий releases/<n>.md -> CHANGELOG/автоген.
           for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md"; do
             if [[ -f "$candidate" ]]; then
               SOURCE="$candidate"
               break
             fi
           done
+          if [[ -z "$SOURCE" ]] && compgen -G "releases/[0-9]*.md" > /dev/null; then
+            LATEST=$(ls releases/[0-9]*.md | sed 's|releases/||; s|\.md$||' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+            SOURCE="releases/$LATEST.md"
+            echo "No notes for $RELEASE_TAG, falling back to the latest: $SOURCE"
+          fi
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Sync in-app What's New
+        env:
+          NOTES_SOURCE: ${{ steps.notes.outputs.source }}
+        run: |
           mkdir -p ProjectTracking/Resources
-          if [[ -n "$SOURCE" ]]; then
-            echo "WhatsNew.md <- $SOURCE"
-            cp "$SOURCE" ProjectTracking/Resources/WhatsNew.md
+          if [[ -n "$NOTES_SOURCE" ]]; then
+            echo "WhatsNew.md <- $NOTES_SOURCE"
+            cp "$NOTES_SOURCE" ProjectTracking/Resources/WhatsNew.md
           elif [[ -f CHANGELOG.md ]]; then
             echo "WhatsNew.md <- CHANGELOG.md (полная история)"
             cp CHANGELOG.md ProjectTracking/Resources/WhatsNew.md
@@ -174,28 +186,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          NOTES_SOURCE: ${{ steps.notes.outputs.source }}
         run: |
-          VERSION="${RELEASE_TAG#v}"
-          NOTES_FILE=""
-          # Описание релиза берётся из releases/<version>.md, если файл
-          # закоммичен в релизном коммите; иначе — автогенерация GitHub.
-          for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md"; do
-            if [[ -f "$candidate" ]]; then
-              NOTES_FILE="$candidate"
-              break
-            fi
-          done
-
           ARGS=(
             --target "$RELEASE_SHA"
             --title "Trace $RELEASE_TAG"
           )
-          if [[ -n "$NOTES_FILE" ]]; then
-            echo "Using release notes from $NOTES_FILE"
+          if [[ -n "$NOTES_SOURCE" ]]; then
+            echo "Release notes: $NOTES_SOURCE"
             gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
-              "${ARGS[@]}" --notes-file "$NOTES_FILE"
+              "${ARGS[@]}" --notes-file "$NOTES_SOURCE"
           else
-            echo "releases/$VERSION.md not found, generating notes automatically"
+            echo "No release notes file, generating notes automatically"
             gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
               "${ARGS[@]}" --generate-notes
           fi

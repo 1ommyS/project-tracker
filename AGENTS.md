@@ -7,6 +7,7 @@ Native macOS SwiftUI app "Trace" for daily project management. Fully local — n
 - `ProjectTracking/` — app source: `MyApp.swift` (entry), `ContentView.swift`, `Models/`, `Services/`, `Views/`, `Utilities/`, `Assets.xcassets`
 - `MyAppTests/` — XCTest tests (target `PulseboardTests`; module is imported as `PROJECT_Tracking`)
 - `scripts/package-release.sh` — builds release `.zip` + `.dmg` from a built `.app`
+- `scripts/sync-release-notes.py` — splits CHANGELOG.md into `releases/<version>.md` files; `scripts/generate-demo-data.py` — demo vault
 - `.github/workflows/ci.yml`, `release.yml` — CI and automated releases
 - `README.md` — storage format spec and release signing secrets; read before touching the vault format or release pipeline
 
@@ -46,5 +47,6 @@ Concurrency split: views/main actor → `AppStore`, file I/O only through the re
 ## CI / Release gotchas
 
 - CI runs on `macos-26` with Xcode 26; tests must pass with `CODE_SIGNING_ALLOWED=NO`.
+- **Release notes are mandatory**: after editing CHANGELOG.md for a shipped version, ALWAYS run `python3 scripts/sync-release-notes.py` and commit the updated `releases/` files. CI resolves notes as: exact `releases/<version>.md` → latest existing `releases/<n>.md` → CHANGELOG (in-app What's New) / auto-generated (GitHub release).
 - `release.yml` runs after every successful CI on `main`, auto-tagging `v0.1.<CI run number>`; manual `workflow_dispatch` accepts an explicit SemVer tag. Without GitHub secrets it produces unsigned builds (signing/notarization secrets are listed in README).
 - Local `DerivedData/`, `dist/`, and signing material (`.p12`, profiles) are gitignored — never commit them.
