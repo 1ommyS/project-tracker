@@ -149,7 +149,27 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
-          gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
-            --target "$RELEASE_SHA" \
-            --title "Trace $RELEASE_TAG" \
-            --generate-notes
+          VERSION="${RELEASE_TAG#v}"
+          NOTES_FILE=""
+          # Описание релиза берётся из releases/<version>.md, если файл
+          # закоммичен в релизном коммите; иначе — автогенерация GitHub.
+          for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md"; do
+            if [[ -f "$candidate" ]]; then
+              NOTES_FILE="$candidate"
+              break
+            fi
+          done
+
+          ARGS=(
+            --target "$RELEASE_SHA"
+            --title "Trace $RELEASE_TAG"
+          )
+          if [[ -n "$NOTES_FILE" ]]; then
+            echo "Using release notes from $NOTES_FILE"
+            gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
+              "${ARGS[@]}" --notes-file "$NOTES_FILE"
+          else
+            echo "releases/$VERSION.md not found, generating notes automatically"
+            gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
+              "${ARGS[@]}" --generate-notes
+          fi
