@@ -114,10 +114,7 @@ final class AppStore {
         await reload()
         await notifications.refreshAuthorization()
         if notifications.authorization == .allowed { await notifications.sync(projects: projects) }
-        monitor.start(url: vaultURL) { [weak self] in
-            guard let self, Date() > self.selfWriteUntil else { return }
-            Task { await self.reload(showSpinner: false) }
-        }
+        observeVault(at: vaultURL)
     }
 
     func reload(showSpinner: Bool = true) async {
@@ -153,14 +150,18 @@ final class AppStore {
     func saveProject(_ project: Project) async {
         var value = project
         value.updatedAt = .now
+        let previous = projects.first(where: { $0.id == project.id })
         do {
             markSelfWrite()
             let saved = try await repository.saveProject(value)
             replace(saved)
-            if saved.tasks.contains(where: { $0.dueDate != nil }) {
-                await notifications.ensureAccessAndSync(projects: projects)
-            } else if notifications.authorization == .allowed {
-                await notifications.sync(projects: projects)
+            let notificationScheduleChanged = previous?.tasks != saved.tasks || previous?.isArchived != saved.isArchived
+            if notificationScheduleChanged {
+                if saved.tasks.contains(where: { $0.dueDate != nil }) {
+                    await notifications.ensureAccessAndSync(projects: projects)
+                } else if notifications.authorization == .allowed {
+                    await notifications.sync(projects: projects)
+                }
             }
         } catch { errorMessage = "Не удалось сохранить проект: \(error.localizedDescription)" }
     }
@@ -226,7 +227,7 @@ final class AppStore {
             vaultURL = url
             await repository.setRootURL(url)
             await reload()
-            monitor.start(url: url) { [weak self] in Task { await self?.reload(showSpinner: false) } }
+            observeVault(at: url)
         } catch { errorMessage = "Не удалось сохранить доступ к папке: \(error.localizedDescription)" }
     }
 
@@ -272,6 +273,13 @@ final class AppStore {
     }
 
     private func markSelfWrite() { selfWriteUntil = Date().addingTimeInterval(1.2) }
+
+    private func observeVault(at url: URL) {
+        monitor.start(url: url) { [weak self] in
+            guard let self, Date() > self.selfWriteUntil else { return }
+            Task { await self.reload(showSpinner: false) }
+        }
+    }
 
     private static var defaultVaultURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

@@ -281,7 +281,7 @@ private struct PulseSidebar: View {
 
     private func sidebarButton(_ destination: SidebarDestination) -> some View {
         Button {
-            withAnimation(.snappy(duration: 0.25)) { store.destination = destination }
+            store.destination = destination
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: destination.symbol).font(.system(size: 14, weight: .semibold)).frame(width: 23)
@@ -304,7 +304,9 @@ private struct PulseSidebar: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain).padding(.horizontal, 9)
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.14), value: store.destination)
+        .padding(.horizontal, 9)
     }
 
     private func badge(for destination: SidebarDestination) -> Int? {

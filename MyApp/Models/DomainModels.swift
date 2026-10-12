@@ -108,12 +108,12 @@ struct ActivityItem: Identifiable, Hashable {
 }
 
 extension String {
-    var nilIfBlank: String? {
+    nonisolated var nilIfBlank: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
     }
 
-    func fileSlug(fallback: String = "project") -> String {
+    nonisolated func fileSlug(fallback: String = "project") -> String {
         let latin = applyingTransform(.toLatin, reverse: false)?
             .applyingTransform(.stripDiacritics, reverse: false) ?? self
         let allowed = latin.lowercased().unicodeScalars.map { scalar -> Character in

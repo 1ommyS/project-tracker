@@ -13,7 +13,7 @@ actor MarkdownRepository {
         try fm.createDirectory(at: projectsURL, withIntermediateDirectories: true)
         let readme = rootURL.appendingPathComponent("README.md")
         if !fm.fileExists(atPath: readme.path) {
-            try "# PROJECT Tracking\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
+            try "# Project Tracking\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
                 .write(to: readme, atomically: true, encoding: .utf8)
         }
     }
@@ -97,7 +97,7 @@ actor MarkdownRepository {
     enum RepositoryError: Error { case missingProjectFolder }
 }
 
-final class VaultMonitor: NSObject, NSFilePresenter {
+nonisolated final class VaultMonitor: NSObject, NSFilePresenter {
     private(set) var presentedItemURL: URL?
     let presentedItemOperationQueue: OperationQueue = {
         let queue = OperationQueue()

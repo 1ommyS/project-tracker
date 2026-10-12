@@ -1,6 +1,6 @@
 import Foundation
 
-enum MarkdownCodec {
+nonisolated enum MarkdownCodec {
     static let iso = ISO8601DateFormatter()
 
     static func encode(project: Project) -> String {
@@ -159,7 +159,7 @@ enum MarkdownCodec {
 }
 
 private extension String {
-    var unquoted: String {
+    nonisolated var unquoted: String {
         guard hasPrefix("\""), hasSuffix("\"") else { return self }
         return String(dropFirst().dropLast()).replacingOccurrences(of: "\\\"", with: "\"").replacingOccurrences(of: "\\\\", with: "\\")
     }

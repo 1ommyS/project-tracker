@@ -85,12 +85,15 @@ struct FadeOverflowRow<Content: View>: View {
 
 private struct SoftScrollFadeModifier: ViewModifier {
     func body(content: Content) -> some View {
-        content.mask {
-            LinearGradient(stops: [
-                .init(color: .black, location: 0),
-                .init(color: .black, location: 0.94),
-                .init(color: .clear, location: 1)
-            ], startPoint: .top, endPoint: .bottom)
+        content.overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [.clear, Color(nsColor: .windowBackgroundColor).opacity(0.82)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 18)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 }
@@ -125,12 +128,22 @@ struct PageBackdrop: View {
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
-            Circle()
-                .fill(PulseStyle.blue.opacity(colorScheme == .dark ? 0.14 : 0.08))
-                .frame(width: 520, height: 520).blur(radius: 90).offset(x: 370, y: -300)
-            Circle()
-                .fill(PulseStyle.mint.opacity(colorScheme == .dark ? 0.08 : 0.05))
-                .frame(width: 420, height: 420).blur(radius: 110).offset(x: -420, y: 350)
+            RadialGradient(
+                colors: [PulseStyle.blue.opacity(colorScheme == .dark ? 0.13 : 0.075), .clear],
+                center: .center,
+                startRadius: 0,
+                endRadius: 270
+            )
+            .frame(width: 540, height: 540)
+            .offset(x: 370, y: -300)
+            RadialGradient(
+                colors: [PulseStyle.mint.opacity(colorScheme == .dark ? 0.075 : 0.045), .clear],
+                center: .center,
+                startRadius: 0,
+                endRadius: 230
+            )
+            .frame(width: 460, height: 460)
+            .offset(x: -420, y: 350)
         }
         .ignoresSafeArea()
     }
