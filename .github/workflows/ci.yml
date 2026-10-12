@@ -17,7 +17,7 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project "ProjectTracking.xcodeproj" \
-            -scheme MyApp \
+            -scheme ProjectTracking \
             -configuration Debug \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO

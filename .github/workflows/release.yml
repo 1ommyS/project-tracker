@@ -101,7 +101,7 @@ jobs:
         run: |
           ARGS=(
             -project "ProjectTracking.xcodeproj"
-            -scheme MyApp
+            -scheme ProjectTracking
             -configuration Release
             -destination 'platform=macOS'
             -derivedDataPath "$RUNNER_TEMP/DerivedData"
