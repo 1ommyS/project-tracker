@@ -138,7 +138,7 @@ struct QuickTaskComposer: View {
                     .frame(height: 20)
             }
             if let date = parsed.dueDate {
-                Label(date.formatted(.dateTime.day().month(.abbreviated).hour().minute()), systemImage: "bell.badge.fill")
+                Label(RuDate.dayMonthTime(date), systemImage: "bell.badge.fill")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.tint)
                     .padding(.horizontal, 8).padding(.vertical, 4)

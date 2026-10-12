@@ -26,7 +26,7 @@ struct ProjectDetailView: View {
                     headerPanel(project)
                     infoPanel
                     tasksPanel(project)
-                    Text("Создан \(project.createdAt.formatted(date: .abbreviated, time: .omitted)) · обновлён \(project.updatedAt.formatted(.relative(presentation: .named)))")
+                    Text("Создан \(project.createdAt.formatted(date: .abbreviated, time: .omitted)) · обновлён \(RuDate.relative(project.updatedAt))")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 4)

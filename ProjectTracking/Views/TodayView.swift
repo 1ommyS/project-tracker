@@ -70,6 +70,7 @@ struct TodayView: View {
             MetricCard(value: "\(overdue.count)", label: "просрочено", symbol: "exclamationmark.triangle.fill", tint: overdue.isEmpty ? .green : .red)
         }
 
+        projectStatuses
         sectionsContent
     }
 
@@ -93,6 +94,35 @@ struct TodayView: View {
                 TodaySection(title: "Задачи на сегодня",
                              symbol: "sun.max.fill", tint: store.palette.color, contexts: dueToday)
             }
+        }
+    }
+
+    /// Сводка последних статусов: каждый активный проект с состоянием,
+    /// прогрессом и временем обновления.
+    private var projectStatuses: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "square.stack.3d.up").foregroundStyle(.tint).font(.body.weight(.medium))
+                Text("Статусы проектов").font(.title3.bold())
+                Spacer()
+                Text("\(store.activeProjects.count)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            VStack(spacing: 2) {
+                ForEach(store.activeProjects.sorted { $0.updatedAt > $1.updatedAt }) { project in
+                    Button {
+                        store.openProject(project.id)
+                    } label: {
+                        ProjectListRow(project: project)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandOnHover()
+                }
+            }
+            .padding(PulseMetrics.card)
+            .pulsePanel(radius: 12)
         }
     }
 
@@ -154,7 +184,7 @@ private struct TodayHero: View {
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                Text(RuDate.full(.now))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(greeting).font(.largeTitle.bold())

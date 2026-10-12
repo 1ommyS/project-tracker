@@ -66,7 +66,7 @@ private struct RecentProjectRow: View {
             }
             Spacer(minLength: 10)
             StateBadge(state: project.state)
-            Text(project.updatedAt.formatted(.relative(presentation: .named)))
+            Text(RuDate.relative(project.updatedAt))
                 .font(.caption).foregroundStyle(.tertiary).fixedSize()
             Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
         }

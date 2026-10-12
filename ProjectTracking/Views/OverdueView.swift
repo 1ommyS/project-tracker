@@ -161,10 +161,10 @@ struct OverdueView: View {
         guard let due = task.dueDate else { return "" }
         let calendar = Calendar.current
         let days = calendar.dateComponents([.day], from: due, to: .now).day ?? 0
-        let date = due.formatted(date: .abbreviated, time: .shortened)
+        let date = RuDate.abbreviatedDateTime(due)
         if days >= 1 {
             return "просрочено на \(days) \(RuGrammar.plural(days, one: "день", few: "дня", many: "дней")) · срок \(date)"
         }
-        return "срок прошёл сегодня в \(due.formatted(date: .omitted, time: .shortened))"
+        return "срок прошёл сегодня в \(RuDate.timeOnly(due))"
     }
 }

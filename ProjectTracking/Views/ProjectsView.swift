@@ -267,7 +267,7 @@ struct ProjectListRow: View {
                         Text("\(project.doneTasks.count)/\(project.tasks.count)")
                     }
                     Spacer(minLength: 4)
-                    Text(project.updatedAt.formatted(.relative(presentation: .named)))
+                    Text(RuDate.relative(project.updatedAt))
                 }.font(.caption2).foregroundStyle(.tertiary)
             }
         }

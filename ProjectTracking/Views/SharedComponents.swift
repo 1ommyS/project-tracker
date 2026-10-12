@@ -20,6 +20,49 @@ extension ProjectState {
     }
 }
 
+// MARK: - Русский формат дат
+
+/// Приложение не локализовано как бандл, поэтому даты форматируем
+/// с явной русской локалью — иначе форматы берутся из development region.
+enum RuDate {
+    private static let ru = Locale(identifier: "ru_RU")
+
+    static func full(_ date: Date) -> String {
+        var style = Date.FormatStyle.dateTime.weekday(.wide).day().month(.wide)
+        style.locale = ru
+        return date.formatted(style)
+    }
+
+    static func dayMonthTime(_ date: Date) -> String {
+        var style = Date.FormatStyle.dateTime.day().month(.abbreviated).hour().minute()
+        style.locale = ru
+        return date.formatted(style)
+    }
+
+    static func abbreviatedDateTime(_ date: Date) -> String {
+        var style = Date.FormatStyle(date: .abbreviated, time: .shortened)
+        style.locale = ru
+        return date.formatted(style)
+    }
+
+    static func timeOnly(_ date: Date) -> String {
+        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+        style.locale = ru
+        return date.formatted(style)
+    }
+
+    static func relative(_ date: Date) -> String {
+        let minutes = Int(date.distance(to: .now) / 60)
+        switch minutes {
+        case ..<1: return "только что"
+        case ..<60: return "\(minutes) мин назад"
+        case ..<1440: return "\(minutes / 60) ч назад"
+        case ..<2880: return "вчера"
+        default: return "\(minutes / 1440) дн назад"
+        }
+    }
+}
+
 // MARK: - Русская множественная форма
 
 enum RuGrammar {
@@ -231,9 +274,9 @@ struct InlineEditableDate: View {
 
     private func text(for date: Date) -> String {
         if Calendar.current.isDateInToday(date) {
-            return date.formatted(date: .omitted, time: .shortened)
+            return RuDate.timeOnly(date)
         }
-        return date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+        return RuDate.dayMonthTime(date)
     }
 }
 
