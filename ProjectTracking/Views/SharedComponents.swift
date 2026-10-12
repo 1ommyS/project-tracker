@@ -126,59 +126,28 @@ extension Array where Element == Project {
     }
 }
 
-/// Инлайн-редактирование срока задачи. Клик по бейджу (или по колокольчику,
-/// появляющемуся при наведении у задач без срока) разворачивает компактный
-/// DatePicker: галочка — применить, крестик — отмена, корзина — убрать срок.
+/// Инлайн-редактирование срока задачи в духе Reminders: клик по бейджу
+/// (или по колокольчику у задач без срока) открывает поповер с большим
+/// графическим календарём, строкой времени и действиями.
+/// Esc/клик мимо закрывают без применения, Return — «Готово».
 struct InlineEditableDate: View {
     @Environment(AppStore.self) private var store
     let date: Date?
     var isDone = false
     let onCommit: (Date?) -> Void
 
-    @State private var isEditing = false
     @State private var draft = Date.now
+    @State private var isEditing = false
     @State private var isHovering = false
 
     var body: some View {
-        Group {
-            if isEditing {
-                editor
-                    .transition(.opacity)
-            } else {
-                display
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: isEditing)
-    }
-
-    // MARK: Просмотр
-
-    private var display: some View {
         HStack(spacing: 6) {
             if let date {
-                Label(text(for: date), systemImage: isDone ? "checkmark.circle" : "bell.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(color(for: date))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background {
-                        if isHovering {
-                            Capsule().fill(.quinary)
-                        } else {
-                            Capsule().fill(color(for: date).opacity(0.09))
-                        }
-                    }
-                    .onTapGesture { start(from: date) }
-                    .help("Клик — изменить срок")
+                badge(text: text(for: date), systemImage: isDone ? "checkmark.circle" : "bell.fill",
+                      color: color(for: date), tapDate: date)
             } else if isHovering {
-                Label("Срок", systemImage: "bell")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Capsule().fill(.quinary))
-                    .onTapGesture { start(from: defaultDraft) }
+                badge(text: "Срок", systemImage: "bell", color: .secondary, tapDate: defaultDraft)
                     .transition(.opacity.combined(with: .scale))
-                    .help("Задать срок и напоминание")
             }
         }
         .onHover { isHovering = $0 }
@@ -186,48 +155,60 @@ struct InlineEditableDate: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: Правка
-
-    private var editor: some View {
-        HStack(spacing: 6) {
-            DatePicker("", selection: $draft, displayedComponents: [.date, .hourAndMinute])
-                .labelsHidden()
-            Button {
-                isEditing = false
-                onCommit(draft)
-            } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
-            .buttonStyle(.plain)
-            .help("Применить (Return не нужен — нажмите галочку)")
-            Button {
-                isEditing = false
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Отмена (Esc)")
-            if date != nil {
-                Button {
-                    isEditing = false
-                    onCommit(nil)
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.secondary)
+    private func badge(text: String, systemImage: String, color: Color, tapDate: Date) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background {
+                if isHovering {
+                    Capsule().fill(.quinary)
+                } else if color != .secondary {
+                    Capsule().fill(color.opacity(0.09))
                 }
-                .buttonStyle(.plain)
-                .help("Убрать срок")
+            }
+            .onTapGesture { start(from: tapDate) }
+            .help("Клик — задать срок и напоминание")
+            .popover(isPresented: $isEditing, arrowEdge: .bottom) { editor }
+    }
+
+    // Большой графический календарь + время, как в Reminders/Календаре.
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DatePicker("", selection: $draft, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+
+            Divider()
+
+            DatePicker("Время", selection: $draft, displayedComponents: [.hourAndMinute])
+                .labelsHidden()
+
+            Divider()
+
+            HStack {
+                if date != nil {
+                    Button(role: .destructive) {
+                        isEditing = false
+                        onCommit(nil)
+                    } label: {
+                        Label("Убрать срок", systemImage: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                }
+                Spacer()
+                Button("Отмена") { isEditing = false }
+                Button("Готово") {
+                    isEditing = false
+                    onCommit(draft)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.5)))
-        .onKeyPress(.escape) {
-            isEditing = false
-            return .handled
-        }
+        .padding(18)
+        .frame(width: 276)
     }
 
     private func start(from date: Date) {
