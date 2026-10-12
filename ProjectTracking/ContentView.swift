@@ -31,6 +31,7 @@ struct ContentView: View {
             .animation(.spring(duration: 0.25), value: columnVisibility)
         }
         .frame(minWidth: 680, minHeight: 520)
+        .tint(store.palette.color)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { store.goBack() } label: { Label("Назад", systemImage: "chevron.backward") }
@@ -135,7 +136,7 @@ private struct MiniNavMap: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.glass)
-        .tint(isSelected ? .accentColor : .secondary)
+        .tint(isSelected ? store.palette.color : .secondary)
         .help(destination.title)
     }
 }
@@ -261,7 +262,7 @@ private struct SidebarProjectRow: View {
             Image(systemName: project.state.symbol)
                 .font(.system(size: 11.5, weight: .medium))
                 .frame(width: 18)
-                .foregroundStyle(project.state.color)
+                .foregroundStyle(project.state.color(palette: store.palette))
             InlineEditableText(font: .system(size: 13, weight: isSelected ? .medium : .regular),
                                tooltip: "Клик — переименовать, по строке — открыть",
                                placeholder: "Проект",

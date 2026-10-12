@@ -13,6 +13,11 @@ extension ProjectState {
         case .archived: .secondary
         }
     }
+
+    /// Активное состояние следует за выбранной палитрой, остальные — семантические.
+    func color(palette: AppPalette) -> Color {
+        self == .active ? palette.color : color
+    }
 }
 
 // MARK: - Русская множественная форма
@@ -29,11 +34,12 @@ enum RuGrammar {
 // MARK: - Общие компоненты
 
 struct StateBadge: View {
+    @Environment(AppStore.self) private var store
     let state: ProjectState
     var body: some View {
         Label(state.title, systemImage: state.symbol)
             .font(.caption.weight(.medium))
-            .foregroundStyle(state.color)
+            .foregroundStyle(state.color(palette: store.palette))
     }
 }
 
@@ -124,6 +130,7 @@ extension Array where Element == Project {
 /// появляющемуся при наведении у задач без срока) разворачивает компактный
 /// DatePicker: галочка — применить, крестик — отмена, корзина — убрать срок.
 struct InlineEditableDate: View {
+    @Environment(AppStore.self) private var store
     let date: Date?
     var isDone = false
     let onCommit: (Date?) -> Void
@@ -238,7 +245,7 @@ struct InlineEditableDate: View {
 
     private func color(for date: Date) -> Color {
         if isDone { return .secondary }
-        return date < .now ? .red : .blue
+        return date < .now ? .red : store.palette.color
     }
 
     private func text(for date: Date) -> String {

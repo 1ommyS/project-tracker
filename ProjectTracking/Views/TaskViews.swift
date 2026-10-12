@@ -114,6 +114,7 @@ struct TaskListSection: View {
 // MARK: - Быстрый ввод с распознаванием срока
 
 struct QuickTaskComposer: View {
+    @Environment(AppStore.self) private var store
     var onAdd: (String, Date?) -> Void
     @State private var text = ""
 
@@ -122,7 +123,7 @@ struct QuickTaskComposer: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.blue)
+                .foregroundStyle(.tint)
                 .font(.title3)
             ZStack(alignment: .leading) {
                 if text.isEmpty {
@@ -132,15 +133,16 @@ struct QuickTaskComposer: View {
                 }
                 HighlightingTextField(text: $text,
                                       highlightRange: parsed.highlightRange,
+                                      accent: NSColor(store.palette.color),
                                       onSubmit: add)
                     .frame(height: 20)
             }
             if let date = parsed.dueDate {
                 Label(date.formatted(.dateTime.day().month(.abbreviated).hour().minute()), systemImage: "bell.badge.fill")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.tint)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.blue.opacity(0.1), in: Capsule())
+                    .background(.tint.opacity(0.1), in: Capsule())
                     .help("Распознанный срок: слова «сегодня», «завтра», дата «25.12» и время «18:30» превращаются в напоминание.")
                     .transition(.opacity.combined(with: .scale))
             }

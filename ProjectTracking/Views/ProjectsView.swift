@@ -237,7 +237,7 @@ struct ProjectListRow: View {
         HStack(spacing: 10) {
             Image(systemName: project.state.symbol)
                 .font(.body.weight(.medium))
-                .foregroundStyle(project.state.color)
+                .foregroundStyle(project.state.color(palette: store.palette))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 4) {
                 InlineEditableText(font: .headline,
@@ -249,7 +249,7 @@ struct ProjectListRow: View {
                     QuarterTag(quarter: project.quarter, compact: true)
                     if project.breadcrumb.count > 1 {
                         Text([project.epic, project.parentProject].compactMap(\.nilIfBlank).joined(separator: " › "))
-                            .font(.caption2.weight(.medium)).foregroundStyle(PulseStyle.blue).lineLimit(1)
+                            .font(.caption2.weight(.medium)).foregroundStyle(.tint).lineLimit(1)
                     }
                 }
                 HStack(spacing: 7) {
@@ -279,7 +279,7 @@ struct ProjectFeedCard: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: project.state.symbol)
                     .font(.title3.weight(.medium))
-                    .foregroundStyle(project.state.color)
+                    .foregroundStyle(project.state.color(palette: store.palette))
                     .frame(width: 26)
                     .padding(.top, 3)
                 VStack(alignment: .leading, spacing: 5) {
@@ -294,7 +294,7 @@ struct ProjectFeedCard: View {
                         ProjectStateMenu(project: project, minWidth: 0)
                     }
                     if project.breadcrumb.count > 1 {
-                        FadeOverflowRow { Text(project.pathLabel).font(.caption.weight(.medium)).foregroundStyle(PulseStyle.blue) }
+                        FadeOverflowRow { Text(project.pathLabel).font(.caption.weight(.medium)).foregroundStyle(.tint) }
                     }
                     if let summary = project.summary.nilIfBlank {
                         Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -302,9 +302,9 @@ struct ProjectFeedCard: View {
                     if !project.tags.isEmpty {
                         FlowLayout(spacing: 6) {
                             ForEach(project.tags, id: \.self) { tag in
-                                Text("#\(tag)").font(.caption2.weight(.medium)).foregroundStyle(PulseStyle.blue)
+                                Text("#\(tag)").font(.caption2.weight(.medium)).foregroundStyle(.tint)
                                     .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(PulseStyle.blue.opacity(0.1), in: Capsule())
+                                    .background(.tint.opacity(0.1), in: Capsule())
                             }
                         }
                     }

@@ -67,7 +67,7 @@ struct ProjectDetailView: View {
             }
         }
         .padding(PulseMetrics.card)
-        .background(LinearGradient(colors: [.blue.opacity(0.06), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
+        .background(LinearGradient(colors: [store.palette.color.opacity(0.06), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
         .pulsePanel(radius: 12)
     }
 

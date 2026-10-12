@@ -204,6 +204,20 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(try current().openTasks.first).title, "Новая формулировка")
     }
 
+    // MARK: - Палитра
+
+    func testPaletteSelectionPersists() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: "appPalette") }
+        store.palette = .purple
+
+        let second = AppStore(vaultURL: vaultURL)
+        XCTAssertEqual(second.palette, .purple, "выбор палитры должен читаться из UserDefaults")
+
+        second.palette = .teal
+        let third = AppStore(vaultURL: vaultURL)
+        XCTAssertEqual(third.palette, .teal)
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

@@ -8,6 +8,7 @@ import SwiftUI
 struct HighlightingTextField: NSViewRepresentable {
     @Binding var text: String
     var highlightRange: Range<String.Index>?
+    var accent: NSColor = .controlAccentColor
     var onSubmit: () -> Void
 
     func makeNSView(context: Context) -> NSTextView {
@@ -84,7 +85,7 @@ struct HighlightingTextField: NSViewRepresentable {
             if let range {
                 let nsRange = NSRange(range, in: fullText)
                 storage.addAttribute(.font, value: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold), range: nsRange)
-                storage.addAttribute(.foregroundColor, value: NSColor.controlAccentColor, range: nsRange)
+                storage.addAttribute(.foregroundColor, value: parent.accent, range: nsRange)
             }
 
             // Печать продолжается обычным стилем, даже если курсор внутри подсветки.

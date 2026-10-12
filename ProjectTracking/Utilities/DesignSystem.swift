@@ -105,6 +105,48 @@ enum PulseMetrics {
     static let contentWidth: CGFloat = 1000
 }
 
+/// Выбираемая палитра акцента приложения. Системные цвета — палитра
+/// автоматически адаптируется к светлой/тёмной теме.
+enum AppPalette: String, CaseIterable, Identifiable {
+    case blue, purple, pink, red, orange, yellow, green, mint, teal, cyan, indigo, graphite
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .blue: "Синий"
+        case .purple: "Фиолетовый"
+        case .pink: "Розовый"
+        case .red: "Красный"
+        case .orange: "Оранжевый"
+        case .yellow: "Жёлтый"
+        case .green: "Зелёный"
+        case .mint: "Мятный"
+        case .teal: "Бирюзовый"
+        case .cyan: "Голубой"
+        case .indigo: "Индиго"
+        case .graphite: "Графитовый"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .blue: .blue
+        case .purple: .purple
+        case .pink: .pink
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .mint: .mint
+        case .teal: .teal
+        case .cyan: .cyan
+        case .indigo: .indigo
+        case .graphite: Color(nsColor: .systemGray)
+        }
+    }
+}
+
 enum PulseStyle {
     // Системная палитра: приложение наследует акценты и appearance macOS.
     static let blue = Color.blue

@@ -44,6 +44,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 22) {
                 TodayHero(total: totalCount, done: doneCount,
                           dueToday: dueToday.count, overdue: overdue.count,
+                          accent: store.palette.color,
                           onOpenProjects: { store.open(.projects) })
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
@@ -67,7 +68,7 @@ struct TodayView: View {
                     }
                     if !dueToday.isEmpty {
                         TodaySection(title: "Задачи на сегодня",
-                                     symbol: "sun.max.fill", tint: PulseStyle.blue, contexts: dueToday)
+                                     symbol: "sun.max.fill", tint: store.palette.color, contexts: dueToday)
                     }
                     if !upcoming.isEmpty {
                         TodaySection(title: "Предстоящие задачи",
@@ -90,6 +91,7 @@ struct TodayView: View {
 
 private struct TodayHero: View {
     let total: Int, done: Int, dueToday: Int, overdue: Int
+    let accent: Color
     let onOpenProjects: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -138,7 +140,7 @@ private struct TodayHero: View {
         ZStack {
             Circle().stroke(.quaternary, lineWidth: 8)
             Circle().trim(from: 0, to: progress).stroke(
-                AngularGradient(colors: [.blue, .mint, .blue], center: .center),
+                AngularGradient(colors: [accent, .mint, accent], center: .center),
                 style: StrokeStyle(lineWidth: 8, lineCap: .round)
             ).rotationEffect(.degrees(-90)).animation(reduceMotion ? nil : .spring, value: progress)
             VStack(spacing: 0) {
@@ -262,7 +264,7 @@ private struct TodayTaskRow: View {
                     Label(context.project.pathLabel.isEmpty ? context.project.title : context.project.pathLabel,
                           systemImage: "square.stack.3d.up")
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(PulseStyle.blue)
+                        .foregroundStyle(.tint)
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)

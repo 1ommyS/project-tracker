@@ -71,7 +71,7 @@ private struct SearchResultRow: View {
             Image(systemName: hit.kind == .project ? "square.stack.3d.up" : "checkmark.circle")
                 .font(.title2)
                 .frame(width: 32)
-                .foregroundStyle(.blue)
+                .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 5) {
                 ViewThatFits(in: .horizontal) {
                     HStack { title; Spacer(minLength: 12); date }
@@ -241,6 +241,7 @@ struct SettingsView: View {
                         ForEach(AppTheme.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    PalettePicker(selection: $store.palette)
                 }
                 Section("Уведомления о задачах") {
                     LabeledContent("Статус") {
@@ -293,5 +294,57 @@ struct SettingsView: View {
 
     private var chooseVaultButton: some View {
         Button("Выбрать…") { Task { await store.chooseVault() } }.buttonStyle(.glass)
+    }
+}
+
+
+/// Сетка свотчей для выбора акцентной палитры.
+struct PalettePicker: View {
+    @Binding var selection: AppPalette
+
+    private let columns = [GridItem(.adaptive(minimum: 68), spacing: 10)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(AppPalette.allCases) { palette in
+                swatch(for: palette)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func swatch(for palette: AppPalette) -> some View {
+        let isSelected = palette == selection
+        return Button {
+            selection = palette
+        } label: {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(palette.color)
+                    .frame(width: 26, height: 26)
+                    .overlay {
+                        if isSelected {
+                            Circle().stroke(.primary.opacity(0.8), lineWidth: 2).padding(-4)
+                        }
+                    }
+                    .shadow(color: palette.color.opacity(isSelected ? 0.45 : 0), radius: 5, y: 2)
+                Text(palette.title)
+                    .font(.caption2)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quaternary.opacity(0.6))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.15), value: selection)
+        .help(palette.title)
     }
 }

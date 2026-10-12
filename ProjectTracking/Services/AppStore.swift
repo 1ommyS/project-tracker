@@ -53,6 +53,9 @@ final class AppStore {
     var theme: AppTheme {
         didSet { UserDefaults.standard.set(theme.rawValue, forKey: Keys.theme) }
     }
+    var palette: AppPalette {
+        didSet { UserDefaults.standard.set(palette.rawValue, forKey: Keys.palette) }
+    }
     private(set) var vaultURL: URL
     let notifications = NotificationService()
 
@@ -67,6 +70,7 @@ final class AppStore {
 
     init(vaultURL: URL) {
         theme = AppTheme(rawValue: UserDefaults.standard.string(forKey: Keys.theme) ?? "system") ?? .system
+        palette = AppPalette(rawValue: UserDefaults.standard.string(forKey: Keys.palette) ?? "") ?? .blue
         self.vaultURL = vaultURL
         repository = MarkdownRepository(rootURL: vaultURL)
         if vaultURL.startAccessingSecurityScopedResource() { scopedURL = vaultURL }
@@ -403,5 +407,6 @@ final class AppStore {
     private enum Keys {
         static let bookmark = "vaultBookmark"
         static let theme = "appTheme"
+        static let palette = "appPalette"
     }
 }
