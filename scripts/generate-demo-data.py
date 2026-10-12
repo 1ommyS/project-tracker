@@ -21,6 +21,11 @@ import sys
 import uuid
 
 DEFAULT_VAULT = os.path.expanduser("~/Library/Application Support/Pulseboard/Vault")
+# Сборки с App Sandbox (запуск из Xcode) держат хранилище в контейнере —
+# если контейнер существует, по умолчанию пишем туда.
+CONTAINER_VAULT = os.path.expanduser(
+    "~/Library/Containers/app.pulseboard.local/Data/Library/Application Support/Pulseboard/Vault"
+)
 
 NOW = dt.datetime.now()
 # Задача со сроком через 5 минут — проверка уведомлений сразу после запуска.
@@ -272,7 +277,9 @@ PROJECTS = [
 
 
 def main() -> None:
-    vault = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_VAULT
+    vault = sys.argv[1] if len(sys.argv) > 1 else (
+        CONTAINER_VAULT if os.path.isdir(CONTAINER_VAULT) else DEFAULT_VAULT
+    )
     projects_dir = os.path.join(vault, "Projects")
     print(f"Vault: {vault}")
     if not os.path.isdir(vault):

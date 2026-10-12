@@ -39,6 +39,12 @@ enum RuDate {
         return date.formatted(style)
     }
 
+    static func dayMonthShort(_ date: Date) -> String {
+        var style = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        style.locale = ru
+        return date.formatted(style)
+    }
+
     static func abbreviatedDateTime(_ date: Date) -> String {
         var style = Date.FormatStyle(date: .abbreviated, time: .shortened)
         style.locale = ru
