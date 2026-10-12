@@ -1,10 +1,23 @@
 import Foundation
 
+/// Разобранный ввод: заголовок, срок и диапазон исходной строки,
+/// который распознан как срок («завтра в 18:00») — для подсветки.
+struct ParsedInput {
+    let title: String
+    let dueDate: Date?
+    let highlightRange: Range<String.Index>?
+}
+
 /// Разбирает строку быстрого ввода в заголовок задачи и, возможно, срок.
 /// Понимает «сегодня», «завтра», «послезавтра», даты «25.12» / «25.12.2027»
-/// и время «18:30» / «в 18». Остальной текст остаётся заголовком задачи.
+/// и время «18:30» / «в 14». Остальной текст остаётся заголовком задачи.
 nonisolated enum TaskInputParser {
     static func parse(_ input: String, now: Date = .now, calendar: Calendar = .current) -> (title: String, dueDate: Date?) {
+        let detailed = parseDetailed(input, now: now, calendar: calendar)
+        return (detailed.title, detailed.dueDate)
+    }
+
+    static func parseDetailed(_ input: String, now: Date = .now, calendar: Calendar = .current) -> ParsedInput {
         var removals: [Range<String.Index>] = []
         var day: Date?
         var time: (hour: Int, minute: Int)?
@@ -45,9 +58,18 @@ nonisolated enum TaskInputParser {
         }
 
         guard day != nil || time != nil else {
-            return (title: input.trimmingCharacters(in: .whitespaces), dueDate: nil)
+            return ParsedInput(title: input.trimmingCharacters(in: .whitespaces), dueDate: nil, highlightRange: nil)
         }
-        return (title: title(from: input, removing: removals), dueDate: resolvedDate(day: day, time: time, now: now, calendar: calendar))
+
+        var lower = removals.map(\.lowerBound).min()!
+        var upper = removals.map(\.upperBound).max()!
+        // Regex захватывает пробел перед совпадением — в подсветку он не входит.
+        while lower < upper, input[lower] == " " { lower = input.index(after: lower) }
+        while upper > lower, input[input.index(before: upper)] == " " { upper = input.index(before: upper) }
+        let dueDate = resolvedDate(day: day, time: time, now: now, calendar: calendar)
+        return ParsedInput(title: title(from: input, removing: removals),
+                           dueDate: dueDate,
+                           highlightRange: lower..<upper)
     }
 
     private static func resolvedDate(day: Date?, time: (hour: Int, minute: Int)?, now: Date, calendar: Calendar) -> Date? {

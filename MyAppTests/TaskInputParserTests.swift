@@ -74,4 +74,34 @@ final class TaskInputParserTests: XCTestCase {
         XCTAssertEqual(parsed.title, "Написать конспект")
         XCTAssertEqual(parsed.dueDate, date(2026, 10, 14, 9, 0))
     }
+
+    // MARK: - Подсветка распознанного срока
+
+    func testHighlightRangeCoversDayAndTimeWithPreposition() {
+        let input = "Позвонить завтра в 18:00"
+        let parsed = TaskInputParser.parseDetailed(input)
+        if let range = parsed.highlightRange {
+            XCTAssertEqual(String(input[range]), "завтра в 18:00")
+        } else {
+            XCTFail("подсветка должна покрывать «завтра в 18:00»")
+        }
+        XCTAssertEqual(parsed.title, "Позвонить")
+    }
+
+    func testHighlightRangeCoversNumericDateAndTime() {
+        let input = "Сдать отчёт 25.12 10:00"
+        let parsed = TaskInputParser.parseDetailed(input)
+        XCTAssertEqual(parsed.highlightRange.map { String(input[$0]) }, "25.12 10:00")
+    }
+
+    func testHighlightRangeOnlyTime() {
+        let input = "Созвон в 14"
+        let parsed = TaskInputParser.parseDetailed(input)
+        XCTAssertEqual(parsed.highlightRange.map { String(input[$0]) }, "в 14")
+    }
+
+    func testHighlightRangeNilForPlainTitle() {
+        let parsed = TaskInputParser.parseDetailed("Макет 2 экрана")
+        XCTAssertNil(parsed.highlightRange)
+    }
 }

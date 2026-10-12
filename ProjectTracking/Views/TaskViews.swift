@@ -117,23 +117,30 @@ struct QuickTaskComposer: View {
     var onAdd: (String, Date?) -> Void
     @State private var text = ""
 
-    private var parsed: (title: String, dueDate: Date?) { TaskInputParser.parse(text) }
+    private var parsed: ParsedInput { TaskInputParser.parseDetailed(text) }
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "plus.circle.fill")
-                .foregroundStyle(PulseStyle.blue)
+                .foregroundStyle(.blue)
                 .font(.title3)
-            TextField("Новая задача — например: «Позвонить завтра 18:00»", text: $text)
-                .textFieldStyle(.plain)
-                .onSubmit(add)
-                .arrowCursorOnExit()
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text("Новая задача — например: «Позвонить завтра 18:00»")
+                        .foregroundStyle(.tertiary)
+                        .allowsHitTesting(false)
+                }
+                HighlightingTextField(text: $text,
+                                      highlightRange: parsed.highlightRange,
+                                      onSubmit: add)
+                    .frame(height: 20)
+            }
             if let date = parsed.dueDate {
                 Label(date.formatted(.dateTime.day().month(.abbreviated).hour().minute()), systemImage: "bell.badge.fill")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(PulseStyle.blue)
+                    .foregroundStyle(.blue)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(PulseStyle.blue.opacity(0.1), in: Capsule())
+                    .background(.blue.opacity(0.1), in: Capsule())
                     .help("Распознанный срок: слова «сегодня», «завтра», дата «25.12» и время «18:30» превращаются в напоминание.")
                     .transition(.opacity.combined(with: .scale))
             }
