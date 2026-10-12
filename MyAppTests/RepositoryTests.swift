@@ -20,6 +20,30 @@ final class RepositoryTests: XCTestCase {
                 isArchived: false, folderURL: nil)
     }
 
+    func testDuplicateProjectIDsDeduplicateToNewest() async throws {
+        let id = UUID()
+        var older = makeProject(createdAt: .now)
+        older.id = id
+        older.title = "Старая копия"
+        older.updatedAt = .now.addingTimeInterval(-3600)
+
+        var newer = older
+        newer.title = "Свежая копия"
+        newer.updatedAt = .now
+
+        let quarterFolder = root.appendingPathComponent("Projects/26Q4/duplicate-slug", isDirectory: true)
+        let flatFolder = root.appendingPathComponent("Projects/duplicate-flat", isDirectory: true)
+        for (folder, project) in [(quarterFolder, older), (flatFolder, newer)] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try MarkdownCodec.encode(project: project)
+                .write(to: folder.appendingPathComponent("Project.md"), atomically: true, encoding: .utf8)
+        }
+
+        let loaded = try await repository.loadProjects()
+        XCTAssertEqual(loaded.count, 1, "дубль по id не должен удваивать проект")
+        XCTAssertEqual(loaded.first?.title, "Свежая копия", "побеждает версия с более свежим updated")
+    }
+
     func testQuarterLabelFormat() {
         let calendar = Calendar.current
         var date = try! XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 12)))

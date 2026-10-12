@@ -22,7 +22,15 @@ actor MarkdownRepository {
         try prepare()
         // Структура: Projects/<YYQN>/<slug>, завершённые — Projects/<YYQN>/Completed Projects/<slug>.
         // Плюс поддержка плоской старой структуры Projects/<slug>.
-        return try scanProjects(in: projectsURL, depth: 0).sorted { $0.updatedAt > $1.updatedAt }
+        let scanned = try scanProjects(in: projectsURL, depth: 0)
+        // Один и тот же id может оказаться в двух папках (ручные копии в
+        // Finder/Obsidian) — оставляем самую свежую версию проекта.
+        var newestByID: [UUID: Project] = [:]
+        for project in scanned {
+            if let existing = newestByID[project.id], existing.updatedAt >= project.updatedAt { continue }
+            newestByID[project.id] = project
+        }
+        return newestByID.values.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private func scanProjects(in directory: URL, depth: Int) throws -> [Project] {
