@@ -81,7 +81,7 @@ struct TodayView: View {
             EmptyState(symbol: "square.stack.3d.up.slash", title: "Пока нет проектов",
                        message: "Создайте первый проект — и его задачи появятся здесь.")
                 .frame(maxWidth: .infinity, minHeight: 280)
-        } else if overdue.isEmpty && dueToday.isEmpty && unscheduled.isEmpty {
+        } else if overdue.isEmpty && dueToday.isEmpty {
             EmptyState(symbol: "checkmark.seal.fill", title: "Всё под контролем",
                        message: "Срочных задач нет. Отдыхайте — или загляните в «Подробно», чтобы увидеть предстоящее.")
                 .frame(maxWidth: .infinity, minHeight: 280)
@@ -93,12 +93,6 @@ struct TodayView: View {
             if !dueToday.isEmpty {
                 TodaySection(title: "Задачи на сегодня",
                              symbol: "sun.max.fill", tint: store.palette.color, contexts: dueToday)
-            }
-            if !unscheduled.isEmpty {
-                TodaySection(title: "Без срока — на сегодня",
-                             symbol: "tray",
-                             tint: .secondary,
-                             contexts: unscheduled)
             }
         }
     }
@@ -213,6 +207,27 @@ struct TodayView: View {
                     .help(task.isDone ? "Вернуть в работу" : "Отметить выполненной")
                 }
             }
+            // В сегодняшней колонке — открытые задачи проекта без срока:
+            // видно, что висит, прямо при заполнении статуса.
+            if Calendar.current.isDateInToday(day) {
+                ForEach(project.openTasks.filter { $0.dueDate == nil }) { task in
+                    Button {
+                        Task { await store.toggleTask(task, in: project) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle.dashed")
+                                .font(.footnote)
+                                .foregroundStyle(task.isDone ? AnyShapeStyle(PulseStyle.mint) : AnyShapeStyle(.tertiary))
+                            Text(task.title)
+                                .font(.footnote)
+                                .foregroundStyle(task.isDone ? .secondary : .primary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Задача без срока — клик отмечает выполненной")
+                }
+            }
         }
         .frame(width: 210, alignment: .leading)
     }
@@ -241,10 +256,7 @@ struct TodayView: View {
                              symbol: "clock.arrow.circlepath", tint: PulseStyle.indigo, contexts: upcoming)
             }
             if !unscheduled.isEmpty {
-                TodaySection(title: "Без срока — на сегодня",
-                             symbol: "tray",
-                             tint: .secondary,
-                             contexts: unscheduled)
+                TodayUnscheduledSection(contexts: unscheduled)
             }
         }
     }
@@ -363,6 +375,36 @@ private struct TodaySection: View {
             .padding(PulseMetrics.card)
             .pulsePanel(radius: 12)
             .animation(.snappy, value: contexts.map(\.id))
+        }
+    }
+}
+
+private struct TodayUnscheduledSection: View {
+    let contexts: [TaskContext]
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DisclosureGroup(isExpanded: $expanded) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(contexts) { context in
+                        ContextTaskRow(context: context)
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "tray").foregroundStyle(.secondary).font(.body.weight(.medium))
+                    Text("Без срока").font(.title3.bold())
+                    Spacer()
+                    Text("\(contexts.count)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .padding(PulseMetrics.card)
+            .pulsePanel(radius: 12)
         }
     }
 }
