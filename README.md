@@ -69,7 +69,7 @@ Vault/
 
 ## Релизы
 
-Workflow `release.yml` запускается по тегу SemVer вида `v1.2.3`, собирает приложение и публикует `.zip` и `.dmg` в GitHub Releases с автоматически сформированными release notes.
+После каждого успешного `CI` в ветке `main` workflow `release.yml` автоматически создаёт SemVer-тег вида `v0.1.<номер CI>`, собирает приложение и публикует `.zip` и `.dmg` в GitHub Releases с автоматически сформированными release notes. Workflow также можно запустить вручную, указав нужную SemVer-версию, например `v1.2.3`.
 
 Без секретов создаётся unsigned-сборка. Для подписи и notarization добавьте GitHub Actions secrets:
 
