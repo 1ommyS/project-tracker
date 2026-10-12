@@ -100,7 +100,7 @@ jobs:
           CAN_SIGN: ${{ steps.credentials.outputs.can_sign }}
         run: |
           ARGS=(
-            -project "Untitled Project.xcodeproj"
+            -project "ProjectTracking.xcodeproj"
             -scheme MyApp
             -configuration Release
             -destination 'platform=macOS'

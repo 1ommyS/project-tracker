@@ -16,7 +16,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -project "Untitled Project.xcodeproj" \
+            -project "ProjectTracking.xcodeproj" \
             -scheme MyApp \
             -configuration Debug \
             -destination 'platform=macOS' \
