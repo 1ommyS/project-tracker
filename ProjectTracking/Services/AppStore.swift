@@ -91,6 +91,19 @@ final class AppStore {
         repository = MarkdownRepository(rootURL: vaultURL)
         if vaultURL.startAccessingSecurityScopedResource() { scopedURL = vaultURL }
         notifications.onEvent = { [weak self] event in self?.handle(event) }
+        applyDemoEnvironment()
+    }
+
+    /// Демо-переменные окружения — выставляют стартовое состояние приложения
+    /// (TRACE_TAB, TRACE_PRESENTATION=editor, TRACE_MODE=focused, TRACE_SELECT=1);
+    /// используются для скриншотов и автоматических демонстраций.
+    private func applyDemoEnvironment() {
+        let env = ProcessInfo.processInfo.environment
+        if let tab = env["TRACE_TAB"], let destination = SidebarDestination(rawValue: tab) {
+            self.destination = destination
+        }
+        if env["TRACE_PRESENTATION"] == "editor" { projectsPresentation = .editor }
+        if env["TRACE_MODE"] == "focused" { interfaceMode = .focused }
     }
 
     var activeProjects: [Project] { projects.filter { !$0.isArchived && $0.state != .archived && $0.state != .done } }
@@ -221,6 +234,9 @@ final class AppStore {
 
     func start() async {
         await reload()
+        if ProcessInfo.processInfo.environment["TRACE_SELECT"] == "1", selectedProjectID == nil {
+            selectedProjectID = projects.first?.id
+        }
         observeVault(at: vaultURL)
         presentWhatsNewIfVersionChanged()
         // Разрешение спрашиваем при первом запуске: без него напоминания

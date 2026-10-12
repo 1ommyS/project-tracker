@@ -7,7 +7,8 @@ struct ContentView: View {
     @State private var showingShortcutHelp = false
     @State private var showingWhatsNew = false
     @State private var taskEditor: TaskEditorContext?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var columnVisibility: NavigationSplitViewVisibility =
+        ProcessInfo.processInfo.environment["TRACE_COLLAP"] == "1" ? .detailOnly : .all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
