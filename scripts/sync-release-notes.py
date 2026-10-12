@@ -38,6 +38,18 @@ def main() -> None:
             handle.write(header + body.strip() + "\n")
         written.append(version)
 
+    # Экран «Что нового» в приложении всегда равен последнему релизу.
+    if written:
+        def version_key(v):
+            return tuple(int(x) for x in v.split("."))
+        latest = max(written, key=version_key)
+        notes = open(os.path.join(releases_dir, f"{latest}.md"), encoding="utf-8").read()
+        resources = os.path.join(ROOT, "ProjectTracking", "Resources")
+        os.makedirs(resources, exist_ok=True)
+        with open(os.path.join(resources, "WhatsNew.md"), "w", encoding="utf-8") as handle:
+            handle.write(notes)
+        print(f"WhatsNew.md <- releases/{latest}.md (последний релиз)")
+
     # Незаименнованный будущий релиз -> releases/NEXT.md
     upcoming = re.search(r"^## Следующий релиз\s*\n(.*?)(?=^## |\Z)", changelog, flags=re.S | re.M)
     if upcoming and upcoming.group(1).strip():

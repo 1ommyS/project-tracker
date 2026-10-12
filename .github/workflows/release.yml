@@ -123,11 +123,8 @@ jobs:
           if [[ -n "$NOTES_SOURCE" ]]; then
             echo "WhatsNew.md <- $NOTES_SOURCE"
             cp "$NOTES_SOURCE" ProjectTracking/Resources/WhatsNew.md
-          elif [[ -f CHANGELOG.md ]]; then
-            echo "WhatsNew.md <- CHANGELOG.md (полная история)"
-            cp CHANGELOG.md ProjectTracking/Resources/WhatsNew.md
           else
-            echo "No release notes source found, keeping bundled WhatsNew.md"
+            echo "No notes source; keeping bundled WhatsNew.md (last release)"
           fi
           head -5 ProjectTracking/Resources/WhatsNew.md || true
 
