@@ -39,13 +39,21 @@ struct ProjectTask: Identifiable, Hashable, Sendable {
     var notificationID: String { "pulseboard.task.\(id.uuidString)" }
 }
 
-/// Ежедневный статус проекта: короткая заметка на дату + блокеры.
+/// Задача-чекбокс внутри дневного статуса (строка «- [ ] …» в файле).
+struct StatusTask: Identifiable, Hashable, Sendable {
+    var id: Int
+    var title: String
+    var isDone: Bool
+}
+
+/// Ежедневный статус проекта: короткая заметка на дату + блокеры + чекбоксы.
 struct DailyStatus: Identifiable, Hashable, Sendable {
     var id = UUID()
     var projectID: UUID
     var date: Date
     var status: String = ""
     var blockers: String = ""
+    var tasks: [StatusTask] = []
     var createdAt = Date.now
     var updatedAt = Date.now
     var fileURL: URL? = nil

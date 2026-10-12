@@ -74,6 +74,7 @@ nonisolated enum MarkdownCodec {
         ---
         ## Статус
         \(status.status)
+        \(status.tasks.isEmpty ? "" : "\n" + status.tasks.map { "- [\($0.isDone ? "x" : " ")] \($0.title)" }.joined(separator: "\n"))
 
         ## Блокеры
         \(status.blockers)
@@ -86,11 +87,25 @@ nonisolated enum MarkdownCodec {
               let projectID = UUID(uuidString: frontmatter["project"] ?? "") else { throw CodecError.invalidStatus }
         let created = iso.date(from: frontmatter["created"] ?? "") ?? .now
         let date = iso.date(from: frontmatter["date"] ?? "") ?? created
+        // Строки-чекбоксы выносятся из текста статуса в отдельный список задач.
+        var statusText = ""
+        var tasks: [StatusTask] = []
+        for line in section("Статус", in: text).split(separator: "\n", omittingEmptySubsequences: false) {
+            let value = line.trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("- [ ] ") || value.lowercased().hasPrefix("- [x] ") {
+                tasks.append(StatusTask(id: tasks.count,
+                                        title: String(value.dropFirst(6)),
+                                        isDone: value.lowercased().hasPrefix("- [x]")))
+            } else {
+                statusText += line + "\n"
+            }
+        }
         return DailyStatus(id: id,
                            projectID: projectID,
                            date: date,
-                           status: section("Статус", in: text),
+                           status: statusText.trimmingCharacters(in: .whitespacesAndNewlines),
                            blockers: section("Блокеры", in: text),
+                           tasks: tasks,
                            createdAt: created,
                            updatedAt: iso.date(from: frontmatter["updated"] ?? "") ?? created,
                            fileURL: fileURL)

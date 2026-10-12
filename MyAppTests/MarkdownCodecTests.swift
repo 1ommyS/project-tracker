@@ -47,6 +47,22 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertTrue(Calendar.current.isDate(decoded.date, inSameDayAs: day))
     }
 
+    func testDailyStatusCheckboxesRoundTrip() throws {
+        let day = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 12))!
+        let status = DailyStatus(id: UUID(), projectID: UUID(), date: day,
+                                 status: "План дня",
+                                 blockers: "",
+                                 tasks: [StatusTask(id: 0, title: "Позвонить дизайнеру", isDone: true),
+                                         StatusTask(id: 1, title: "Отправить макет", isDone: false)])
+        let markdown = MarkdownCodec.encode(status: status)
+        XCTAssertTrue(markdown.contains("- [x] Позвонить дизайнеру"))
+        XCTAssertTrue(markdown.contains("- [ ] Отправить макет"))
+
+        let decoded = try MarkdownCodec.decodeStatus(markdown, fileURL: URL(fileURLWithPath: "/tmp/s.md"))
+        XCTAssertEqual(decoded.status, "План дня", "чекбоксы не остаются в тексте статуса")
+        XCTAssertEqual(decoded.tasks, status.tasks)
+    }
+
     func testRepositoryPersistsProjectAndTasks() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PulseboardTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

@@ -101,7 +101,8 @@ struct TodayView: View {
     /// Клик по ячейке правит статус конкретного дня инлайн.
     private var statusMatrix: some View {
         let calendar = Calendar.current
-        let days = (0..<5).compactMap { calendar.date(byAdding: .day, value: $0 - 4, to: calendar.startOfDay(for: .now)) }
+        // По убыванию даты: сегодня — первая колонка.
+        let days = (0..<5).compactMap { calendar.date(byAdding: .day, value: -$0, to: calendar.startOfDay(for: .now)) }
         let projects = store.activeProjects.sorted { $0.updatedAt > $1.updatedAt }
         let today = calendar.startOfDay(for: .now)
 
@@ -162,15 +163,7 @@ struct TodayView: View {
                             .frame(width: 156, alignment: .leading)
 
                             ForEach(days, id: \.self) { day in
-                                InlineEditableText(font: .caption,
-                                                   color: .secondary,
-                                                   lineLimit: 3,
-                                                   tooltip: "Статус на \(RuDate.dayMonthShort(day))",
-                                                   placeholder: "—",
-                                                   text: project.dailyStatus(on: day)?.status ?? "") { newText in
-                                    Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: day) }
-                                }
-                                .frame(width: 148, alignment: .leading)
+                                statusCell(project: project, day: day)
                             }
                         }
                         Divider().gridCellColumns(2 + days.count)
@@ -180,6 +173,42 @@ struct TodayView: View {
                 .frame(minWidth: 980, alignment: .leading)
             }
         }
+    }
+
+    /// Ячейка дня: текст статуса + чекбоксы задач из файла статуса.
+    private func statusCell(project: Project, day: Date) -> some View {
+        let entry = project.dailyStatus(on: day)
+        return VStack(alignment: .leading, spacing: 3) {
+            InlineEditableText(font: .caption,
+                               color: .secondary,
+                               lineLimit: 3,
+                               tooltip: "Статус на \(RuDate.dayMonthShort(day))",
+                               placeholder: "—",
+                               text: entry?.status ?? "") { newText in
+                Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: day) }
+            }
+            if let entry {
+                ForEach(entry.tasks) { task in
+                    Button {
+                        Task { await store.toggleStatusTask(task, in: entry, for: project) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                .font(.caption2)
+                                .foregroundStyle(task.isDone ? PulseStyle.mint : .secondary)
+                            Text(task.title)
+                                .font(.caption2)
+                                .foregroundStyle(task.isDone ? .secondary : .primary)
+                                .strikethrough(task.isDone)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(task.isDone ? "Вернуть в работу" : "Отметить выполненной")
+                }
+            }
+        }
+        .frame(width: 148, alignment: .leading)
     }
 
     @ViewBuilder

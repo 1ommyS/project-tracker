@@ -309,7 +309,7 @@ final class AppStore {
 
     // MARK: - Инлайн-переименование
 
-    /// Правка дневного статуса: text/blockers = nil — не трогаем, пустая строка — очищаем.
+    /// Правка дневного статуса: text/blockers = nil — не трогаем, пустая строка — очищает.
     func setDailyStatus(text: String?, blockers: String?, for project: Project, on date: Date) async {
         let calendar = Calendar.current
         let day = calendar.startOfDay(for: date)
@@ -318,17 +318,29 @@ final class AppStore {
             ?? DailyStatus(id: UUID(), projectID: value.id, date: day)
         if let text { entry.status = text.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let blockers { entry.blockers = blockers.trimmingCharacters(in: .whitespacesAndNewlines) }
+        await upsert(entry, in: &value)
+    }
+
+    func toggleStatusTask(_ task: StatusTask, in status: DailyStatus, for project: Project) async {
+        var entry = status
+        guard entry.tasks.indices.contains(task.id) else { return }
+        entry.tasks[task.id].isDone.toggle()
         entry.updatedAt = .now
+        var value = project
+        await upsert(entry, in: &value)
+    }
+
+    private func upsert(_ entry: DailyStatus, in project: inout Project) async {
         do {
             markSelfWrite()
-            let saved = try await repository.saveStatus(entry, for: value)
-            if let index = value.statuses.firstIndex(where: { $0.id == saved.id }) {
-                value.statuses[index] = saved
+            let saved = try await repository.saveStatus(entry, for: project)
+            if let index = project.statuses.firstIndex(where: { $0.id == saved.id }) {
+                project.statuses[index] = saved
             } else {
-                value.statuses.append(saved)
+                project.statuses.append(saved)
             }
-            value.statuses.sort { $0.date > $1.date }
-            replace(value)
+            project.statuses.sort { $0.date > $1.date }
+            replace(project)
         } catch {
             errorMessage = "Не удалось сохранить статус: \(error.localizedDescription)"
         }

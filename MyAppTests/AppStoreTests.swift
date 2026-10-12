@@ -276,6 +276,23 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(restored.latestBlockers, "Жду ревью")
     }
 
+    func testStatusCheckboxesTypedInlineAndToggled() async throws {
+        let project = try await makeProject("Матрица")
+
+        // Пользователь печатает чекбоксы прямо в тексте статуса.
+        await store.setDailyStatus(text: "План:\n- [ ] позвонить\n- [x] собрать макет", blockers: nil, for: project, on: .now)
+        await store.reload()
+        let entry = try XCTUnwrap(try current().statuses.first { Calendar.current.isDateInToday($0.date) })
+        XCTAssertEqual(entry.status, "План:")
+        XCTAssertEqual(entry.tasks.map(\.title), ["позвонить", "собрать макет"])
+        XCTAssertTrue(entry.tasks[1].isDone)
+
+        await store.toggleStatusTask(entry.tasks[0], in: entry, for: try current())
+        await store.reload()
+        let updated = try XCTUnwrap(try current().statuses.first { Calendar.current.isDateInToday($0.date) })
+        XCTAssertTrue(updated.tasks[0].isDone, "переключение чекбокса сохраняется на диск")
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {
