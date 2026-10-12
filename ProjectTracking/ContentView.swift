@@ -41,7 +41,7 @@ struct ContentView: View {
                 if let next { Task { @MainActor in try? await Task.sleep(for: .milliseconds(180)); statusProject = next } }
             }
         }
-        .alert("PROJECT Tracking", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
+        .alert("Project Tracking", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
         .onChange(of: store.recentProjectsRequest) { _, _ in showingRecentProjects = true }
@@ -175,7 +175,7 @@ private struct ShortcutHelpView: View {
         (["⌘", "T"], "Новая задача", "Открыть текущий проект и поставить курсор в поле быстрой задачи."),
         (["⌘", "⇧", "↩"], "Обновить статус", "Открыть статус на сегодня для выбранного или первого активного проекта."),
         (["⌘", "1…4"], "Навигация", "Сегодня, Проекты, Активность и Архив — без мыши."),
-        (["⌘", ","], "Настройки", "Открыть системное окно настроек PROJECT Tracking."),
+        (["⌘", ","], "Настройки", "Открыть системное окно настроек Project Tracking."),
         (["⌘", "K"], "Поиск", "Дополнительное сочетание для быстрого поиска.")
     ]
 
@@ -184,7 +184,7 @@ private struct ShortcutHelpView: View {
             HStack(spacing: 13) {
                 BrandIcon(size: 48)
                 VStack(alignment: .leading, spacing: 2) {
-                    SectionEyebrow(text: "PROJECT Tracking")
+                    SectionEyebrow(text: "Project Tracking")
                     Text("Горячие клавиши").font(.title2.bold())
                 }
                 Spacer()
@@ -215,7 +215,7 @@ private struct ShortcutHelpView: View {
             }
             .softScrollFade()
 
-            Text("Подсказка: сочетания работают из любого основного экрана PROJECT Tracking.")
+            Text("Подсказка: сочетания работают из любого основного экрана Project Tracking.")
                 .font(.caption).foregroundStyle(.secondary).padding(.bottom, 18)
         }
         .frame(minWidth: 440, idealWidth: 630, maxWidth: 760, minHeight: 460, idealHeight: 700, maxHeight: 820)
@@ -250,7 +250,7 @@ private struct PulseSidebar: View {
             HStack(spacing: 12) {
                 BrandIcon(size: 46)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("PROJECT Tracking").font(.system(size: 19, weight: .bold, design: .rounded)).minimumScaleFactor(0.72).lineLimit(1)
+                    Text("Project Tracking").font(.system(size: 19, weight: .bold, design: .rounded)).minimumScaleFactor(0.72).lineLimit(1)
                     Text("Project rhythm").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                 }
             }.padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 22)

@@ -23,10 +23,10 @@ struct ProjectTrackingApp: App {
                 Button("Обновить статус…") { store.openStatusEditor() }.keyboardShortcut(.return, modifiers: [.command, .shift])
             }
             CommandGroup(after: .pasteboard) {
-                Button("Найти в PROJECT Tracking…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
+                Button("Найти в Project Tracking…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
             }
             CommandGroup(replacing: .help) {
-                Button("Горячие клавиши PROJECT Tracking") { store.openShortcutHelp() }
+                Button("Горячие клавиши Project Tracking") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)
