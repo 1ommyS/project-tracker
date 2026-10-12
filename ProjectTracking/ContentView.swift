@@ -23,6 +23,13 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.18), value: store.destination)
+            .overlay(alignment: .topLeading) {
+                if columnVisibility == .detailOnly {
+                    MiniNavMap { columnVisibility = .all }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.25), value: columnVisibility)
         }
         .frame(minWidth: 680, minHeight: 520)
         .tint(store.palette.color)
@@ -120,6 +127,70 @@ struct ContentView: View {
         case .archive: ArchiveView()
         case .settings: SettingsView()
         }
+    }
+}
+
+// MARK: - Мини-навигация (когда сайдбар свёрнут)
+
+/// Плавающая glass-панель с подписями: экраны и возврат боковой панели.
+private struct MiniNavMap: View {
+    @Environment(AppStore.self) private var store
+    let onShowSidebar: () -> Void
+    private let destinations: [SidebarDestination] = [.today, .projects, .overdue, .search, .archive]
+
+    var body: some View {
+        GlassEffectContainer(spacing: 4) {
+            VStack(spacing: 4) {
+                Button(action: onShowSidebar) {
+                    VStack(spacing: 2) {
+                        Image(systemName: "sidebar.left").font(.system(size: 13, weight: .medium))
+                        Text("Панель").font(.system(size: 9))
+                    }
+                    .frame(width: 58, height: 42)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.glass)
+                .help("Показать боковую панель")
+
+                ForEach(destinations) { destination in
+                    destinationButton(destination)
+                }
+            }
+            .padding(6)
+        }
+        .padding(.leading, 10)
+        .padding(.top, 8)
+    }
+
+    private func destinationButton(_ destination: SidebarDestination) -> some View {
+        let isSelected = store.destination == destination
+        return Button {
+            store.open(destination)
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: destination.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                Text(destination.title)
+                    .font(.system(size: 9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(width: 58, height: 44)
+            .overlay(alignment: .topTrailing) {
+                if destination == .overdue, store.overdueTasks.count > 0 {
+                    Text("\(store.overdueTasks.count)")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Capsule().fill(.red))
+                        .offset(x: 3, y: -3)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.glass)
+        .tint(isSelected ? store.palette.color : .secondary)
+        .help(destination.title)
     }
 }
 

@@ -18,6 +18,7 @@ struct ProjectDetailView: View {
     @State private var saveTask: Task<Void, Never>?
     @State private var showDone = false
     @State private var deleteConfirmation = false
+    @State private var statusDay = Date.now
 
     var body: some View {
         if let project {
@@ -25,6 +26,7 @@ struct ProjectDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     headerPanel(project)
                     infoPanel
+                    statusesPanel(project)
                     tasksPanel(project)
                     Text("Создан \(project.createdAt.formatted(date: .abbreviated, time: .omitted)) · обновлён \(RuDate.relative(project.updatedAt))")
                         .font(.caption2)
@@ -121,6 +123,82 @@ struct ProjectDetailView: View {
                 .fieldAppearance()
                 .arrowCursorOnExit()
         }
+    }
+
+    // MARK: - Статусы по дням
+
+    /// Статус за произвольную дату: выбор дня, текст, блокеры, чекбоксы.
+    private func statusesPanel(_ project: Project) -> some View {
+        let calendar = Calendar.current
+        let entry = project.dailyStatus(on: statusDay)
+        let quickDays = (0..<4).compactMap { calendar.date(byAdding: .day, value: -$0, to: calendar.startOfDay(for: .now)) }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label("Статусы по дням", systemImage: "calendar")
+                    .font(.title3.bold())
+                Spacer()
+                DatePicker("", selection: $statusDay, displayedComponents: [.date])
+                    .labelsHidden()
+                    .frame(width: 132)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(quickDays, id: \.self) { day in
+                    let isSelected = calendar.isDate(statusDay, inSameDayAs: day)
+                    Button {
+                        statusDay = day
+                    } label: {
+                        Text(RuDate.dayMonthShort(day))
+                            .font(.caption.weight(isSelected ? .semibold : .regular))
+                    }
+                    .buttonStyle(.glass)
+                    .tint(isSelected ? store.palette.color : .secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Статус на \(RuDate.dayMonthShort(statusDay))\(calendar.isDateInToday(statusDay) ? " (сегодня)" : "")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                InlineEditableText(font: .body,
+                                   lineLimit: nil,
+                                   tooltip: "Клик — править статус на этот день",
+                                   placeholder: "Что было сделано, что дальше…",
+                                   text: entry?.status ?? "") { newText in
+                    Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: statusDay) }
+                }
+                Text("Блокеры").font(.caption).foregroundStyle(.secondary)
+                InlineEditableText(font: .body,
+                                   color: (entry?.blockers ?? "").isEmpty ? .secondary : .red,
+                                   lineLimit: nil,
+                                   tooltip: "Клик — правка блокеров на этот день",
+                                   placeholder: "—",
+                                   text: entry?.blockers ?? "") { newBlockers in
+                    Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: statusDay) }
+                }
+                if let entry {
+                    ForEach(entry.tasks) { task in
+                        Button {
+                            Task { await store.toggleStatusTask(task, in: entry, for: project) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isDone ? PulseStyle.mint : .secondary)
+                                Text(task.title)
+                                    .strikethrough(task.isDone)
+                                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help(task.isDone ? "Вернуть в работу" : "Отметить выполненной")
+                    }
+                }
+            }
+            .padding(10)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(PulseMetrics.card)
+        .pulsePanel(radius: 12)
     }
 
     // MARK: - Задачи

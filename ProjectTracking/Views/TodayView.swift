@@ -118,13 +118,13 @@ struct TodayView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 0) {
                     GridRow {
-                        Text("Проект").font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                        Text("Блокеры").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        Text("Проект").font(.callout.weight(.bold)).foregroundStyle(.secondary)
+                        Text("Блокеры").font(.callout.weight(.bold)).foregroundStyle(.secondary)
                         ForEach(days, id: \.self) { day in
                             Text(RuDate.dayMonthShort(day))
-                                .font(day == today ? .caption.weight(.bold) : .caption)
+                                .font(day == today ? .callout.weight(.bold) : .callout)
                                 .foregroundStyle(day == today ? Color.red : .secondary)
-                                .frame(width: 148, alignment: .leading)
+                                .frame(width: 210, alignment: .leading)
                         }
                     }
                     .padding(.vertical, 6)
@@ -150,17 +150,17 @@ struct TodayView: View {
                                 .pointingHandOnHover()
                                 QuarterTag(quarter: project.quarter, compact: true)
                             }
-                            .frame(width: 172, alignment: .leading)
+                            .frame(width: 210, alignment: .leading)
 
-                            InlineEditableText(font: .caption,
+                            InlineEditableText(font: .callout,
                                                color: (project.latestBlockers ?? "").isEmpty ? .secondary : .red,
-                                               lineLimit: 3,
+                                               lineLimit: 4,
                                                tooltip: "Клик — правка блокеров (записывается в сегодняшний статус)",
                                                placeholder: "—",
                                                text: project.latestBlockers ?? "") { newBlockers in
                                 Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: .now) }
                             }
-                            .frame(width: 156, alignment: .leading)
+                            .frame(width: 200, alignment: .leading)
 
                             ForEach(days, id: \.self) { day in
                                 statusCell(project: project, day: day)
@@ -170,7 +170,7 @@ struct TodayView: View {
                     }
                 }
                 .padding(PulseMetrics.card)
-                .frame(minWidth: 980, alignment: .leading)
+                .frame(minWidth: 1290, alignment: .leading)
             }
         }
     }
@@ -179,9 +179,9 @@ struct TodayView: View {
     private func statusCell(project: Project, day: Date) -> some View {
         let entry = project.dailyStatus(on: day)
         return VStack(alignment: .leading, spacing: 3) {
-            InlineEditableText(font: .caption,
+            InlineEditableText(font: .callout,
                                color: .secondary,
-                               lineLimit: 3,
+                               lineLimit: 5,
                                tooltip: "Статус на \(RuDate.dayMonthShort(day))",
                                placeholder: "—",
                                text: entry?.status ?? "") { newText in
@@ -194,10 +194,10 @@ struct TodayView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                                .font(.caption2)
+                                .font(.footnote)
                                 .foregroundStyle(task.isDone ? PulseStyle.mint : .secondary)
                             Text(task.title)
-                                .font(.caption2)
+                                .font(.footnote)
                                 .foregroundStyle(task.isDone ? .secondary : .primary)
                                 .strikethrough(task.isDone)
                                 .lineLimit(1)
@@ -208,7 +208,7 @@ struct TodayView: View {
                 }
             }
         }
-        .frame(width: 148, alignment: .leading)
+        .frame(width: 210, alignment: .leading)
     }
 
     @ViewBuilder
