@@ -271,7 +271,9 @@ private struct TodayTaskRow: View {
 
             Spacer(minLength: 8)
 
-            TaskDueBadge(task: context.task)
+            InlineEditableDate(date: context.task.dueDate, isDone: context.task.isDone) { newDate in
+                Task { await store.setTaskDueDate(context.task, to: newDate, in: context.project) }
+            }
 
             Button {
                 editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)

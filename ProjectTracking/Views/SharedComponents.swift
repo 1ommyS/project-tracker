@@ -120,6 +120,135 @@ extension Array where Element == Project {
     }
 }
 
+/// Инлайн-редактирование срока задачи. Клик по бейджу (или по колокольчику,
+/// появляющемуся при наведении у задач без срока) разворачивает компактный
+/// DatePicker: галочка — применить, крестик — отмена, корзина — убрать срок.
+struct InlineEditableDate: View {
+    let date: Date?
+    var isDone = false
+    let onCommit: (Date?) -> Void
+
+    @State private var isEditing = false
+    @State private var draft = Date.now
+    @State private var isHovering = false
+
+    var body: some View {
+        Group {
+            if isEditing {
+                editor
+                    .transition(.opacity)
+            } else {
+                display
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: isEditing)
+    }
+
+    // MARK: Просмотр
+
+    private var display: some View {
+        HStack(spacing: 6) {
+            if let date {
+                Label(text(for: date), systemImage: isDone ? "checkmark.circle" : "bell.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(color(for: date))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background {
+                        if isHovering {
+                            Capsule().fill(.quinary)
+                        } else {
+                            Capsule().fill(color(for: date).opacity(0.09))
+                        }
+                    }
+                    .onTapGesture { start(from: date) }
+                    .help("Клик — изменить срок")
+            } else if isHovering {
+                Label("Срок", systemImage: "bell")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(.quinary))
+                    .onTapGesture { start(from: defaultDraft) }
+                    .transition(.opacity.combined(with: .scale))
+                    .help("Задать срок и напоминание")
+            }
+        }
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Правка
+
+    private var editor: some View {
+        HStack(spacing: 6) {
+            DatePicker("", selection: $draft, displayedComponents: [.date, .hourAndMinute])
+                .labelsHidden()
+            Button {
+                isEditing = false
+                onCommit(draft)
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            .buttonStyle(.plain)
+            .help("Применить (Return не нужен — нажмите галочку)")
+            Button {
+                isEditing = false
+            } label: {
+                Image(systemName: "xmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Отмена (Esc)")
+            if date != nil {
+                Button {
+                    isEditing = false
+                    onCommit(nil)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Убрать срок")
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.5)))
+        .onKeyPress(.escape) {
+            isEditing = false
+            return .handled
+        }
+    }
+
+    private func start(from date: Date) {
+        draft = date
+        isEditing = true
+    }
+
+    private var defaultDraft: Date {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: calendar.date(byAdding: .day, value: 1, to: .now) ?? .now)
+        components.hour = 9
+        components.minute = 0
+        return calendar.date(from: components) ?? .now
+    }
+
+    private func color(for date: Date) -> Color {
+        if isDone { return .secondary }
+        return date < .now ? .red : .blue
+    }
+
+    private func text(for date: Date) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        return date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+    }
+}
+
 // MARK: - Инлайн-редактирование текста
 
 /// Клик по тексту превращает его в поле ввода. Return или клик мимо — сохраняет,

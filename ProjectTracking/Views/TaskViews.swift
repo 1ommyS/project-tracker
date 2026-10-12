@@ -1,33 +1,5 @@
 import SwiftUI
 
-// MARK: - Бейдж срока
-
-struct TaskDueBadge: View {
-    let task: ProjectTask
-
-    var body: some View {
-        if let due = task.dueDate {
-            Label(text(for: due), systemImage: task.isDone ? "checkmark.circle" : "bell.fill")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(color)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(color.opacity(0.1), in: Capsule())
-        }
-    }
-
-    private var color: Color {
-        guard let due = task.dueDate, !task.isDone else { return .secondary }
-        return due < .now ? .red : PulseStyle.blue
-    }
-
-    private func text(for due: Date) -> String {
-        if Calendar.current.isDateInToday(due) {
-            return due.formatted(date: .omitted, time: .shortened)
-        }
-        return due.formatted(.dateTime.day().month(.abbreviated).hour().minute())
-    }
-}
-
 // MARK: - Строка задачи
 
 struct TaskRowView: View {
@@ -35,6 +7,7 @@ struct TaskRowView: View {
     let onToggle: () -> Void
     let onEdit: () -> Void
     let onRename: (String) -> Void
+    let onSetDate: (Date?) -> Void
     var onDelete: (() -> Void)? = nil
 
     var body: some View {
@@ -58,7 +31,7 @@ struct TaskRowView: View {
 
             Spacer(minLength: 8)
 
-            TaskDueBadge(task: task)
+            InlineEditableDate(date: task.dueDate, isDone: task.isDone, onCommit: onSetDate)
 
             Button(action: onEdit) {
                 Image(systemName: task.isDone ? "pencil.circle" : "pencil.circle.fill")
@@ -133,6 +106,7 @@ struct TaskListSection: View {
                     onToggle: { Task { await store.toggleTask(task, in: project) } },
                     onEdit: { taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id) },
                     onRename: { newTitle in Task { await store.renameTask(task, to: newTitle, in: project) } },
+                    onSetDate: { newDate in Task { await store.setTaskDueDate(task, to: newDate, in: project) } },
                     onDelete: { Task { await store.deleteTask(task, in: project) } })
     }
 }

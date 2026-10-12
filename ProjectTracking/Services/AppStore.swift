@@ -278,6 +278,12 @@ final class AppStore {
         await updateTask(value, in: project)
     }
 
+    func setTaskDueDate(_ task: ProjectTask, to date: Date?, in project: Project) async {
+        var value = task
+        value.dueDate = date
+        await updateTask(value, in: project)
+    }
+
     func archive(_ project: Project) async {
         var value = project
         value.isArchived = true
