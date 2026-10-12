@@ -28,6 +28,7 @@ struct ProjectTrackingApp: App {
                 Button("Вперёд") { store.goForward() }.keyboardShortcut("]", modifiers: .command).disabled(!store.canGoForward)
             }
             CommandGroup(replacing: .help) {
+                Button("Что нового в Trace") { store.openWhatsNew() }
                 Button("Горячие клавиши Trace") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {

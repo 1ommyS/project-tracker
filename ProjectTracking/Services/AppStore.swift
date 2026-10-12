@@ -49,6 +49,7 @@ final class AppStore {
     var recentProjectsRequest = 0
     var shortcutHelpRequest = 0
     var quickTaskRequest = 0
+    var whatsNewRequest = 0
     var quickTaskProjectID: UUID?
     var theme: AppTheme {
         didSet { UserDefaults.standard.set(theme.rawValue, forKey: Keys.theme) }
@@ -106,6 +107,23 @@ final class AppStore {
 
     func openShortcutHelp() {
         shortcutHelpRequest &+= 1
+    }
+
+    /// Показать экран «Что нового» (меню Справка).
+    func openWhatsNew() {
+        whatsNewRequest &+= 1
+    }
+
+    /// Автопоказ при смене версии приложения; на самом первом запуске молча
+    /// запоминаем версию, чтобы не встречать пользователя экраном релизов.
+    private func presentWhatsNewIfVersionChanged() {
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        let seen = UserDefaults.standard.string(forKey: Keys.lastSeenVersion)
+        guard seen != current else { return }
+        UserDefaults.standard.set(current, forKey: Keys.lastSeenVersion)
+        if seen != nil {
+            whatsNewRequest &+= 1
+        }
     }
 
     func open(_ destination: SidebarDestination) {
@@ -182,6 +200,7 @@ final class AppStore {
     func start() async {
         await reload()
         observeVault(at: vaultURL)
+        presentWhatsNewIfVersionChanged()
         // Разрешение спрашиваем при первом запуске: без него напоминания
         // о сроках не появятся никогда, а пользователь этого не узнает.
         await notifications.authorizeAndSync(projects: projects)
@@ -408,5 +427,6 @@ final class AppStore {
         static let bookmark = "vaultBookmark"
         static let theme = "appTheme"
         static let palette = "appPalette"
+        static let lastSeenVersion = "lastSeenVersion"
     }
 }

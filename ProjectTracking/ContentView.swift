@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var showingNewProject = false
     @State private var showingRecentProjects = false
     @State private var showingShortcutHelp = false
+    @State private var showingWhatsNew = false
     @State private var taskEditor: TaskEditorContext?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -64,12 +65,14 @@ struct ContentView: View {
         .sheet(isPresented: $showingNewProject) { NewProjectView() }
         .sheet(isPresented: $showingRecentProjects) { RecentProjectsView() }
         .sheet(isPresented: $showingShortcutHelp) { ShortcutHelpView() }
+        .sheet(isPresented: $showingWhatsNew) { WhatsNewView() }
         .sheet(item: $taskEditor) { context in TaskEditorView(context: context) }
         .alert("Trace", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
         .onChange(of: store.recentProjectsRequest) { _, _ in showingRecentProjects = true }
         .onChange(of: store.shortcutHelpRequest) { _, _ in showingShortcutHelp = true }
+        .onChange(of: store.whatsNewRequest) { _, _ in showingWhatsNew = true }
         .onChange(of: store.quickTaskRequest) { _, _ in taskEditorForQuickTask() }
     }
 
