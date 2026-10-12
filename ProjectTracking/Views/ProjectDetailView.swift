@@ -12,6 +12,7 @@ struct ProjectDetailView: View {
     @State private var epic = ""
     @State private var parentProject = ""
     @State private var summary = ""
+    @State private var status = ""
     @State private var tagsText = ""
     @State private var hydrated = false
     @State private var isDirty = false
@@ -44,6 +45,7 @@ struct ProjectDetailView: View {
             .onChange(of: epic) { _, _ in markDirty() }
             .onChange(of: parentProject) { _, _ in markDirty() }
             .onChange(of: summary) { _, _ in markDirty() }
+        .onChange(of: status) { _, _ in markDirty() }
             .onChange(of: tagsText) { _, _ in markDirty() }
         }
     }
@@ -93,6 +95,13 @@ struct ProjectDetailView: View {
                 Text(isDirty ? "Сохранение…" : "Автосохранение")
                     .font(.caption)
                     .foregroundStyle(isDirty ? PulseStyle.amber : .secondary)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Статус").font(.caption).foregroundStyle(.secondary)
+                TextField("Что сейчас по проекту — одной строкой", text: $status, axis: .vertical)
+                    .lineLimit(1...3)
+                    .fieldAppearance()
+                    .arrowCursorOnExit()
             }
             fieldRow("Эпик", text: $epic, prompt: "Например: Диплом")
             fieldRow("Проект", text: $parentProject, prompt: "Например: macOS-приложение")
@@ -161,6 +170,7 @@ struct ProjectDetailView: View {
         epic = project.epic
         parentProject = project.parentProject
         summary = project.summary
+        status = project.status
         tagsText = project.tags.joined(separator: ", ")
         isDirty = false
     }
@@ -189,6 +199,7 @@ struct ProjectDetailView: View {
         value.epic = epic
         value.parentProject = parentProject
         value.summary = summary
+        value.status = status
         value.tags = tagsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         Task { await store.saveProject(value) }
     }

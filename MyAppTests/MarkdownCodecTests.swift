@@ -7,6 +7,7 @@ final class MarkdownCodecTests: XCTestCase {
         let dueDate = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 18, minute: 30)))
         let project = Project(id: UUID(), title: "Модуль статусов", epic: "Диплом", parentProject: "macOS-приложение",
                               summary: "Описание [[Связанный проект]]",
+                              status: "Пишем главу 2, ждём фидбек научрука",
                               tags: ["учёба", "важно"], state: .active,
                               tasks: [ProjectTask(title: "Собрать требования", isDone: true),
                                       ProjectTask(title: "Написать главу", isDone: false, dueDate: dueDate)],
@@ -26,6 +27,8 @@ final class MarkdownCodecTests: XCTestCase {
         let decodedDueDate = try XCTUnwrap(decoded.tasks[1].dueDate)
         XCTAssertEqual(decodedDueDate.timeIntervalSince1970, dueDate.timeIntervalSince1970, accuracy: 1)
         XCTAssertEqual(decoded.summary, project.summary)
+        XCTAssertEqual(decoded.status, "Пишем главу 2, ждём фидбек научрука")
+        XCTAssertTrue(markdown.contains("## Статус"))
         XCTAssertTrue(markdown.contains("📅 2026-10-20 ⏰ 18:30"))
     }
 
@@ -77,5 +80,6 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertEqual(decoded.id, id)
         XCTAssertEqual(decoded.tasks.count, 1)
         XCTAssertEqual(decoded.tasks[0].title, "Одна задача")
+        XCTAssertEqual(decoded.status, "", "файлы без секции ## Статус читаются с пустым статусом")
     }
 }

@@ -56,7 +56,7 @@ def quarter(date: dt.datetime) -> str:
     return f"{date.year % 100:02d}Q{(date.month - 1) // 3 + 1}"
 
 
-def encode(title, epic, parent, state, tags, created, updated, archived, description, tasks):
+def encode(title, epic, parent, state, tags, created, updated, archived, description, tasks, status=""):
     task_lines = []
     for done, name, due in tasks:
         line = f"- [{'x' if done else ' '}] {name}"
@@ -80,6 +80,8 @@ def encode(title, epic, parent, state, tags, created, updated, archived, descrip
         f"# {title}\n\n"
         "## Описание\n"
         f"{description}\n\n"
+        "## Статус\n"
+        f"{status}\n\n"
         "## Задачи\n"
         + "\n".join(task_lines)
         + "\n"
@@ -276,6 +278,22 @@ PROJECTS = [
 ]
 
 
+STATUSES = {
+    "redizayn-sayta": "Макет главной на согласовании — ждём фидбек маркетинга.",
+    "api-avtorizacii": "Refresh-токены почти готовы, остались интеграционные тесты.",
+    "kurs-po-swiftui": "Идём по плану: 6 модулей из 8 закрыто.",
+    "sport-i-zdorove": "Держим три тренировки в неделю.",
+    "planirovanie-2027": "Собираю пожелания команды до конца недели.",
+    "issledovanie-rynka": "Завершено: выводы ушли в презентацию.",
+    "migraciya-bazy": "Блок: ждём закупку нового кластера.",
+    "naym-komandy": "На паузе до утверждения бюджета.",
+    "diplom-magistratury": "Глава 2 у научрука, правим таблицу источников.",
+    "sayt-portfolio": "Завершён и задеплоен.",
+    "lending-proshloy-versii": "Устарел после ребрендинга.",
+    "zapusk-startupa": "Идея валидируется интервью.",
+}
+
+
 def main() -> None:
     vault = sys.argv[1] if len(sys.argv) > 1 else (
         CONTAINER_VAULT if os.path.isdir(CONTAINER_VAULT) else DEFAULT_VAULT
@@ -300,7 +318,7 @@ def main() -> None:
         path = os.path.join(folder, project["slug"], "Project.md")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
-            handle.write(encode(tasks=project["tasks"], **meta))
+            handle.write(encode(tasks=project["tasks"], status=STATUSES.get(project["slug"], ""), **meta))
         created += 1
         print(f"  + {quarter(meta['created'])}/{'Completed Projects/' if folder != quarter_dir else ''}{project['slug']} — {meta['title']} [{meta['state']}]")
 

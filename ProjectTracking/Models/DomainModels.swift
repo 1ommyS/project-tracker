@@ -45,6 +45,8 @@ struct Project: Identifiable, Hashable, Sendable {
     var epic: String = ""
     var parentProject: String = ""
     var summary: String
+    /// Короткая заметка «что сейчас» — последняя по делу, без истории.
+    var status: String = ""
     var tags: [String]
     var state: ProjectState
     var tasks: [ProjectTask]

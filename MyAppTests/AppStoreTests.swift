@@ -244,6 +244,19 @@ final class AppStoreTests: XCTestCase {
                        "только открытые задачи с прошедшим сроком, самые старые сверху")
     }
 
+    func testSetProjectStatusPersistsAndClears() async throws {
+        let project = try await makeProject("Проект")
+        await store.setProjectStatus(project, to: "Ждём ревью макета")
+
+        XCTAssertEqual(try current().status, "Ждём ревью макета")
+        await store.reload()
+        XCTAssertEqual(try current().status, "Ждём ревью макета", "статус сохраняется в Project.md")
+
+        let updated = try current()
+        await store.setProjectStatus(updated, to: "   ")
+        XCTAssertEqual(try current().status, "", "пустой статус очищается")
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

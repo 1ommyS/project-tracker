@@ -309,6 +309,14 @@ final class AppStore {
 
     // MARK: - Инлайн-переименование
 
+    func setProjectStatus(_ project: Project, to status: String) async {
+        let trimmed = status.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != project.status.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        var value = project
+        value.status = trimmed
+        await saveProject(value)
+    }
+
     func renameProject(_ project: Project, to newTitle: String) async {
         guard let title = newTitle.nilIfBlank, title != project.title else { return }
         var value = project

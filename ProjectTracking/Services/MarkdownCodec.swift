@@ -27,6 +27,9 @@ nonisolated enum MarkdownCodec {
         ## Описание
         \(project.summary)
 
+        ## Статус
+        \(project.status)
+
         ## Задачи
         \(tasks)
         """
@@ -52,7 +55,8 @@ nonisolated enum MarkdownCodec {
         return Project(id: id, title: title,
                        epic: frontmatter["epic"]?.unquoted ?? "",
                        parentProject: frontmatter["parent_project"]?.unquoted ?? "",
-                       summary: section("Описание", in: text), tags: tags,
+                       summary: section("Описание", in: text),
+                       status: section("Статус", in: text), tags: tags,
                        state: state, tasks: tasks,
                        createdAt: created, updatedAt: updated, isArchived: archived,
                        folderURL: folderURL)

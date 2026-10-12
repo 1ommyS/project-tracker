@@ -248,11 +248,19 @@ struct ProjectListRow: View {
                 .font(.body.weight(.medium))
                 .foregroundStyle(project.state.color(palette: store.palette))
                 .frame(width: 22)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 InlineEditableText(font: .headline,
                                    placeholder: "Название проекта",
                                    text: project.title) { newTitle in
                     Task { await store.renameProject(project, to: newTitle) }
+                }
+                InlineEditableText(font: .caption,
+                                   color: .secondary,
+                                   lineLimit: 2,
+                                   tooltip: "Клик — обновить заметку по статусу",
+                                   placeholder: "Статус…",
+                                   text: project.status) { newStatus in
+                    Task { await store.setProjectStatus(project, to: newStatus) }
                 }
                 HStack(spacing: 5) {
                     QuarterTag(quarter: project.quarter, compact: true)
