@@ -111,9 +111,9 @@ jobs:
           if [[ -n "$SOURCE" ]]; then
             echo "WhatsNew.md <- $SOURCE"
             cp "$SOURCE" ProjectTracking/Resources/WhatsNew.md
-          elif [[ -f CHANGELOG.md ]] && grep -q '^## ' CHANGELOG.md; then
-            echo "WhatsNew.md <- latest CHANGELOG section"
-            awk '/^## /{if (found) exit; found=1} found' CHANGELOG.md > ProjectTracking/Resources/WhatsNew.md
+          elif [[ -f CHANGELOG.md ]]; then
+            echo "WhatsNew.md <- CHANGELOG.md (полная история)"
+            cp CHANGELOG.md ProjectTracking/Resources/WhatsNew.md
           else
             echo "No release notes source found, keeping bundled WhatsNew.md"
           fi
