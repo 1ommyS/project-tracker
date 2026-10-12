@@ -87,25 +87,22 @@ private struct MiniNavMap: View {
     private let destinations: [SidebarDestination] = [.today, .projects, .search, .archive]
 
     var body: some View {
-        VStack(spacing: 4) {
-            Button(action: onShowSidebar) {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 30)
-                    .foregroundStyle(.primary)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Показать боковую панель")
+        GlassEffectContainer(spacing: 4) {
+            VStack(spacing: 4) {
+                Button(action: onShowSidebar) {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.glass)
+                .help("Показать боковую панель")
 
-            Divider().frame(width: 18)
-
-            ForEach(destinations) { destination in
-                destinationButton(destination)
+                ForEach(destinations) { destination in
+                    destinationButton(destination)
+                }
             }
+            .padding(6)
         }
-        .padding(8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.leading, 12)
         .padding(.top, 10)
     }
@@ -118,12 +115,6 @@ private struct MiniNavMap: View {
             Image(systemName: destination.symbol)
                 .font(.system(size: 13, weight: .medium))
                 .frame(width: 30, height: 30)
-                .foregroundStyle(isSelected ? Color.primary : .secondary)
-                .background {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
-                    }
-                }
                 .overlay(alignment: .topTrailing) {
                     if destination == .today, store.urgentTaskCount > 0 {
                         Circle().fill(.red).frame(width: 6, height: 6).offset(x: 2, y: -2)
@@ -131,7 +122,8 @@ private struct MiniNavMap: View {
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .tint(isSelected ? .accentColor : .secondary)
         .help(destination.title)
     }
 }

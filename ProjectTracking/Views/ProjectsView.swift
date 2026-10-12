@@ -234,11 +234,11 @@ struct ProjectListRow: View {
     let project: Project
 
     var body: some View {
-        HStack(spacing: 11) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10).fill(project.state.color.opacity(0.13)).frame(width: 36, height: 36)
-                Image(systemName: project.state.symbol).foregroundStyle(project.state.color).font(.system(size: 14, weight: .semibold))
-            }
+        HStack(spacing: 10) {
+            Image(systemName: project.state.symbol)
+                .font(.body.weight(.medium))
+                .foregroundStyle(project.state.color)
+                .frame(width: 22)
             VStack(alignment: .leading, spacing: 4) {
                 InlineEditableText(font: .headline,
                                    placeholder: "Название проекта",
@@ -276,11 +276,12 @@ struct ProjectFeedCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(project.state.color.opacity(0.13)).frame(width: 44, height: 44)
-                    Image(systemName: project.state.symbol).foregroundStyle(project.state.color).font(.system(size: 16, weight: .semibold))
-                }
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: project.state.symbol)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(project.state.color)
+                    .frame(width: 26)
+                    .padding(.top, 3)
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         InlineEditableText(font: .title3.bold(),

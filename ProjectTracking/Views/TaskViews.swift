@@ -313,7 +313,7 @@ struct TaskEditorView: View {
             components.minute = time.minute ?? 0
             dueDate = calendar.date(from: components) ?? dueDate
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
     }
 
     private func save() {

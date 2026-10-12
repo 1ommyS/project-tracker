@@ -32,10 +32,8 @@ struct StateBadge: View {
     let state: ProjectState
     var body: some View {
         Label(state.title, systemImage: state.symbol)
-            .font(.caption.weight(.semibold))
+            .font(.caption.weight(.medium))
             .foregroundStyle(state.color)
-            .padding(.horizontal, 9).padding(.vertical, 5)
-            .background(state.color.opacity(0.12), in: Capsule())
     }
 }
 

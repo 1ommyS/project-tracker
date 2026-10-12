@@ -55,11 +55,11 @@ private struct RecentProjectRow: View {
     let project: Project
 
     var body: some View {
-        HStack(spacing: 13) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 11).fill(project.state.color.opacity(0.13)).frame(width: 40, height: 40)
-                Image(systemName: project.state.symbol).foregroundStyle(project.state.color)
-            }
+        HStack(spacing: 12) {
+            Image(systemName: project.state.symbol)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(project.state.color)
+                .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.title).font(.headline).lineLimit(2)
                 FadeOverflowRow { Text(project.pathLabel).font(.caption).foregroundStyle(.secondary) }
