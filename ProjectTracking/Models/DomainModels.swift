@@ -39,6 +39,18 @@ struct ProjectTask: Identifiable, Hashable, Sendable {
     var notificationID: String { "pulseboard.task.\(id.uuidString)" }
 }
 
+/// Ежедневный статус проекта: короткая заметка на дату + блокеры.
+struct DailyStatus: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var projectID: UUID
+    var date: Date
+    var status: String = ""
+    var blockers: String = ""
+    var createdAt = Date.now
+    var updatedAt = Date.now
+    var fileURL: URL? = nil
+}
+
 struct Project: Identifiable, Hashable, Sendable {
     var id: UUID
     var title: String
@@ -53,10 +65,22 @@ struct Project: Identifiable, Hashable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var isArchived: Bool
+    var statuses: [DailyStatus] = []
     var folderURL: URL?
 
     var breadcrumb: [String] { [epic.nilIfBlank, parentProject.nilIfBlank, title.nilIfBlank].compactMap { $0 } }
     var pathLabel: String { breadcrumb.joined(separator: "  ›  ") }
+
+    func dailyStatus(on date: Date, calendar: Calendar = .current) -> DailyStatus? {
+        statuses.first { calendar.isDate($0.date, inSameDayAs: date) }
+    }
+
+    /// Самые свежие непустые блокеры.
+    var latestBlockers: String? {
+        statuses
+            .sorted { $0.date > $1.date }
+            .first { $0.blockers.nilIfBlank != nil }?.blockers
+    }
 
     var openTasks: [ProjectTask] { tasks.filter { !$0.isDone } }
     var doneTasks: [ProjectTask] { tasks.filter(\.isDone) }

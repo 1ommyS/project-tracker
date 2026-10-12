@@ -41,7 +41,8 @@ actor MarkdownRepository {
             let projectFile = folder.appendingPathComponent("Project.md")
             if fm.fileExists(atPath: projectFile.path),
                let text = try? String(contentsOf: projectFile, encoding: .utf8),
-               let project = try? MarkdownCodec.decodeProject(text, folderURL: folder) {
+               var project = try? MarkdownCodec.decodeProject(text, folderURL: folder) {
+                project.statuses = loadStatuses(in: folder).sorted { $0.date > $1.date }
                 result.append(project)
             } else if depth < 2 {
                 result.append(contentsOf: try scanProjects(in: folder, depth: depth + 1))
@@ -86,6 +87,27 @@ actor MarkdownRepository {
             : quarterRoot
     }
 
+    private func loadStatuses(in folder: URL) -> [DailyStatus] {
+        let statusFolder = folder.appendingPathComponent("Statuses", isDirectory: true)
+        let files = (try? fm.contentsOfDirectory(at: statusFolder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        return files.filter { $0.pathExtension.lowercased() == "md" }.compactMap { url in
+            guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            return try? MarkdownCodec.decodeStatus(source, fileURL: url)
+        }
+    }
+
+    func saveStatus(_ status: DailyStatus, for project: Project) throws -> DailyStatus {
+        guard let folder = project.folderURL else { throw RepositoryError.missingProjectFolder }
+        let statusesFolder = folder.appendingPathComponent("Statuses", isDirectory: true)
+        try fm.createDirectory(at: statusesFolder, withIntermediateDirectories: true)
+        let day = Self.dayFormatter.string(from: status.date)
+        let url = status.fileURL ?? statusesFolder.appendingPathComponent("\(day)-\(status.id.uuidString.prefix(8)).md")
+        try Data(MarkdownCodec.encode(status: status).utf8).write(to: url, options: .atomic)
+        var result = status
+        result.fileURL = url
+        return result
+    }
+
     func deleteProject(_ project: Project) throws {
         guard let url = project.folderURL, fm.fileExists(atPath: url.path) else { return }
         var trashed: NSURL?
@@ -108,6 +130,13 @@ actor MarkdownRepository {
         }
         return candidate
     }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     enum RepositoryError: Error { case missingProjectFolder }
 }

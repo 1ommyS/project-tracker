@@ -70,7 +70,7 @@ struct TodayView: View {
             MetricCard(value: "\(overdue.count)", label: "просрочено", symbol: "exclamationmark.triangle.fill", tint: overdue.isEmpty ? .green : .red)
         }
 
-        projectStatuses
+        statusMatrix
         sectionsContent
     }
 
@@ -97,32 +97,88 @@ struct TodayView: View {
         }
     }
 
-    /// Сводка последних статусов: каждый активный проект с состоянием,
-    /// прогрессом и временем обновления.
-    private var projectStatuses: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// Матрица статусов: проекты × дни, с колонкой блокеров.
+    /// Клик по ячейке правит статус конкретного дня инлайн.
+    private var statusMatrix: some View {
+        let calendar = Calendar.current
+        let days = (0..<5).compactMap { calendar.date(byAdding: .day, value: $0 - 4, to: calendar.startOfDay(for: .now)) }
+        let projects = store.activeProjects.sorted { $0.updatedAt > $1.updatedAt }
+        let today = calendar.startOfDay(for: .now)
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "square.stack.3d.up").foregroundStyle(.tint).font(.body.weight(.medium))
-                Text("Статусы проектов").font(.title3.bold())
+                Image(systemName: "square.grid.2x2").foregroundStyle(.tint).font(.body.weight(.medium))
+                Text("Статусы по дням").font(.title3.bold())
                 Spacer()
-                Text("\(store.activeProjects.count)")
-                    .font(.subheadline.weight(.semibold))
+                Text("клик по ячейке — правка статуса на этот день")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .monospacedDigit()
             }
-            VStack(spacing: 2) {
-                ForEach(store.activeProjects.sorted { $0.updatedAt > $1.updatedAt }) { project in
-                    Button {
-                        store.openProject(project.id)
-                    } label: {
-                        ProjectListRow(project: project)
+            ScrollView(.horizontal, showsIndicators: false) {
+                Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 0) {
+                    GridRow {
+                        Text("Проект").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        Text("Блокеры").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        ForEach(days, id: \.self) { day in
+                            Text(RuDate.dayMonthShort(day))
+                                .font(day == today ? .caption.weight(.bold) : .caption)
+                                .foregroundStyle(day == today ? Color.red : .secondary)
+                                .frame(width: 148, alignment: .leading)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .pointingHandOnHover()
+                    .padding(.vertical, 6)
+
+                    ForEach(projects) { project in
+                        GridRow {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Button {
+                                    store.openProject(project.id)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: project.state.symbol)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(project.state.color(palette: store.palette))
+                                        Text(project.title)
+                                            .font(.callout.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .pointingHandOnHover()
+                                QuarterTag(quarter: project.quarter, compact: true)
+                            }
+                            .frame(width: 172, alignment: .leading)
+
+                            InlineEditableText(font: .caption,
+                                               color: (project.latestBlockers ?? "").isEmpty ? .secondary : .red,
+                                               lineLimit: 3,
+                                               tooltip: "Клик — правка блокеров (записывается в сегодняшний статус)",
+                                               placeholder: "—",
+                                               text: project.latestBlockers ?? "") { newBlockers in
+                                Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: .now) }
+                            }
+                            .frame(width: 156, alignment: .leading)
+
+                            ForEach(days, id: \.self) { day in
+                                InlineEditableText(font: .caption,
+                                                   color: .secondary,
+                                                   lineLimit: 3,
+                                                   tooltip: "Статус на \(RuDate.dayMonthShort(day))",
+                                                   placeholder: "—",
+                                                   text: project.dailyStatus(on: day)?.status ?? "") { newText in
+                                    Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: day) }
+                                }
+                                .frame(width: 148, alignment: .leading)
+                            }
+                        }
+                        Divider().gridCellColumns(2 + days.count)
+                    }
                 }
+                .padding(PulseMetrics.card)
+                .frame(minWidth: 980, alignment: .leading)
             }
-            .padding(PulseMetrics.card)
-            .pulsePanel(radius: 12)
         }
     }
 

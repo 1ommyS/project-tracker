@@ -37,7 +37,7 @@ Concurrency split: views/main actor → `AppStore`, file I/O only through the re
 
 ## Hard constraints
 
-- **Obsidian compatibility**: keep YAML frontmatter fields (`id`, `title`, `epic`, `parent_project`, `state`, `tags`, `created`, `updated`, `archived`), Russian section headers (`## Описание`, `## Статус`, `## Задачи`), and task format `- [ ] Title 📅 YYYY-MM-DD ⏰ HH:mm`. Breaking the format breaks users' existing vaults.
+- **Obsidian compatibility**: keep YAML frontmatter fields (`id`, `title`, `epic`, `parent_project`, `state`, `tags`, `created`, `updated`, `archived`), Russian section headers (`## Описание`, `## Статус`, `## Задачи`), task format `- [ ] Title 📅 YYYY-MM-DD ⏰ HH:mm`, and daily statuses as `Statuses/YYYY-MM-DD-<8hex>.md` (`## Статус`, `## Блокеры`) rendered as the project×day matrix on Today. Breaking the format breaks users' existing vaults.
 - **Quarter folder layout**: projects live in `Projects/<YYQN>/<slug>/` (quarter of `createdAt`, `Date.quarterLabel`); completed projects (`state == .done/.archived` or `isArchived`) are moved to `Projects/<YYQN>/Completed Projects/<slug>/` by `MarkdownRepository.saveProject`. The slug stays stable across moves. The legacy flat `Projects/<slug>/` layout must keep loading (see `RepositoryTests`).
 - All user-facing strings are hardcoded Russian — no localization files.
 - No network calls or telemetry, ever (by design).

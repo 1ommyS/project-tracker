@@ -309,6 +309,31 @@ final class AppStore {
 
     // MARK: - Инлайн-переименование
 
+    /// Правка дневного статуса: text/blockers = nil — не трогаем, пустая строка — очищаем.
+    func setDailyStatus(text: String?, blockers: String?, for project: Project, on date: Date) async {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        var value = project
+        var entry = value.statuses.first { calendar.isDate($0.date, inSameDayAs: day) }
+            ?? DailyStatus(id: UUID(), projectID: value.id, date: day)
+        if let text { entry.status = text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let blockers { entry.blockers = blockers.trimmingCharacters(in: .whitespacesAndNewlines) }
+        entry.updatedAt = .now
+        do {
+            markSelfWrite()
+            let saved = try await repository.saveStatus(entry, for: value)
+            if let index = value.statuses.firstIndex(where: { $0.id == saved.id }) {
+                value.statuses[index] = saved
+            } else {
+                value.statuses.append(saved)
+            }
+            value.statuses.sort { $0.date > $1.date }
+            replace(value)
+        } catch {
+            errorMessage = "Не удалось сохранить статус: \(error.localizedDescription)"
+        }
+    }
+
     func setProjectStatus(_ project: Project, to status: String) async {
         let trimmed = status.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed != project.status.trimmingCharacters(in: .whitespacesAndNewlines) else { return }

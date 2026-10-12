@@ -62,6 +62,40 @@ nonisolated enum MarkdownCodec {
                        folderURL: folderURL)
     }
 
+    static func encode(status: DailyStatus) -> String {
+        """
+        ---
+        type: daily-status
+        id: \(status.id.uuidString)
+        project: \(status.projectID.uuidString)
+        date: \(iso.string(from: status.date))
+        created: \(iso.string(from: status.createdAt))
+        updated: \(iso.string(from: status.updatedAt))
+        ---
+        ## Статус
+        \(status.status)
+
+        ## Блокеры
+        \(status.blockers)
+        """
+    }
+
+    static func decodeStatus(_ text: String, fileURL: URL) throws -> DailyStatus {
+        let frontmatter = parseFrontmatter(text)
+        guard let id = UUID(uuidString: frontmatter["id"] ?? ""),
+              let projectID = UUID(uuidString: frontmatter["project"] ?? "") else { throw CodecError.invalidStatus }
+        let created = iso.date(from: frontmatter["created"] ?? "") ?? .now
+        let date = iso.date(from: frontmatter["date"] ?? "") ?? created
+        return DailyStatus(id: id,
+                           projectID: projectID,
+                           date: date,
+                           status: section("Статус", in: text),
+                           blockers: section("Блокеры", in: text),
+                           createdAt: created,
+                           updatedAt: iso.date(from: frontmatter["updated"] ?? "") ?? created,
+                           fileURL: fileURL)
+    }
+
     static func parseFrontmatter(_ text: String) -> [String: String] {
         let lines = text.components(separatedBy: .newlines)
         guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return [:] }
@@ -112,7 +146,7 @@ nonisolated enum MarkdownCodec {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
-    enum CodecError: Error { case invalidProject }
+    enum CodecError: Error { case invalidProject, invalidStatus }
 }
 
 private extension String {

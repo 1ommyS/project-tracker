@@ -278,6 +278,21 @@ PROJECTS = [
 ]
 
 
+# Дневные статусы: slug -> [(дней назад, статус, блокеры)]
+DAILY = {
+    "redizayn-sayta": [(2, "Собрали фидбек по первому экрану", ""), (1, "Макет главной в работе", ""), (0, "На согласовании у маркетинга", "")],
+    "api-avtorizacii": [(1, "Refresh-токены: черновик готов", ""), (0, "Пишем интеграционные тесты", "Тестовая база занята до вечера")],
+    "kurs-po-swiftui": [(3, "Закрыли модуль про жесты", ""), (1, "Начали модуль макетирования", ""), (0, "Конспект модуля 7", "")],
+    "migraciya-bazy": [(2, "Тестовый прогон упал", "Нет тестового кластера"), (0, "Ждём закупку", "Закупка кластера не согласована")],
+    "diplom-magistratury": [(1, "Глава 2 отправлена научруку", ""), (0, "Правим таблицу источников", "Научрук в отпуске до четверга")],
+    "sport-i-zdorove": [(0, "Три тренировки в неделю держим", "")],
+    "planirovanie-2027": [(0, "Собираем пожелания команды", "")],
+    "naym-komandy": [(2, "Обновили описание вакансий", "Бюджет не утверждён")],
+    "issledovanie-rynka": [(3, "Интервью завершены", ""), (2, "Пишем выводы", "")],
+    "sayt-portfolio": [(5, "Деплой прошёл", "")],
+    "zapusk-startupa": [(0, "Валидируем идею интервью", "")],
+}
+
 STATUSES = {
     "redizayn-sayta": "Макет главной на согласовании — ждём фидбек маркетинга.",
     "api-avtorizacii": "Refresh-токены почти готовы, остались интеграционные тесты.",
@@ -319,6 +334,30 @@ def main() -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(encode(tasks=project["tasks"], status=STATUSES.get(project["slug"], ""), **meta))
+        with open(path, encoding="utf-8") as handle:
+            proj_id = [ln.split(": ")[1].strip() for ln in handle.read().splitlines() if ln.startswith("id: ")][0]
+        # Дневные статусы
+        statuses_dir = os.path.join(os.path.dirname(path), "Statuses")
+        for days_ago, status_text, blockers in DAILY.get(project["slug"], []):
+            os.makedirs(statuses_dir, exist_ok=True)
+            day = (NOW - dt.timedelta(days=days_ago)).replace(hour=12, minute=0, second=0, microsecond=0)
+            sid = uuid.uuid4()
+            status_md = (
+                "---\n"
+                "type: daily-status\n"
+                f"id: {sid}\n"
+                f"project: {proj_id}\n"
+                f"date: {iso(day)}\n"
+                f"created: {iso(day)}\n"
+                f"updated: {iso(day)}\n"
+                "---\n\n"
+                "## Статус\n"
+                f"{status_text}\n\n"
+                "## Блокеры\n"
+                f"{blockers}\n"
+            )
+            with open(os.path.join(statuses_dir, f"{task_date(day)}-{str(sid)[:8]}.md"), "w", encoding="utf-8") as sf:
+                sf.write(status_md)
         created += 1
         print(f"  + {quarter(meta['created'])}/{'Completed Projects/' if folder != quarter_dir else ''}{project['slug']} — {meta['title']} [{meta['state']}]")
 

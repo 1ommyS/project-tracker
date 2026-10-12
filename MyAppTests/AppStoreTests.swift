@@ -257,6 +257,25 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(try current().status, "", "пустой статус очищается")
     }
 
+    func testDailyStatusUpsertPerDay() async throws {
+        let project = try await makeProject("Матрица")
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+
+        await store.setDailyStatus(text: "Пишем главу", blockers: nil, for: project, on: .now)
+        await store.setDailyStatus(text: "Правим главу", blockers: nil, for: try current(), on: .now)
+        await store.setDailyStatus(text: nil, blockers: "Жду ревью", for: try current(), on: yesterday)
+
+        let today = try current().statuses.first { Calendar.current.isDateInToday($0.date) }
+        XCTAssertEqual(today?.status, "Правим главу", "повторная правка того же дня обновляет, а не создаёт запись")
+        XCTAssertEqual(try current().statuses.count, 2)
+
+        await store.reload()
+        let restored = try current()
+        XCTAssertEqual(restored.statuses.count, 2, "дневные статусы читаются с диска")
+        XCTAssertEqual(restored.statuses.first { Calendar.current.isDateInToday($0.date) }?.status, "Правим главу")
+        XCTAssertEqual(restored.latestBlockers, "Жду ревью")
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

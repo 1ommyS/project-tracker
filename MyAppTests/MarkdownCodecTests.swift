@@ -32,6 +32,21 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertTrue(markdown.contains("📅 2026-10-20 ⏰ 18:30"))
     }
 
+    func testDailyStatusRoundTrip() throws {
+        let day = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 12))!
+        let status = DailyStatus(id: UUID(), projectID: UUID(), date: day,
+                                 status: "Глава у научрука", blockers: "Жду API",
+                                 createdAt: day, updatedAt: day, fileURL: nil)
+        let decoded = try MarkdownCodec.decodeStatus(
+            MarkdownCodec.encode(status: status),
+            fileURL: URL(fileURLWithPath: "/tmp/s.md"))
+        XCTAssertEqual(decoded.id, status.id)
+        XCTAssertEqual(decoded.projectID, status.projectID)
+        XCTAssertEqual(decoded.status, "Глава у научрука")
+        XCTAssertEqual(decoded.blockers, "Жду API")
+        XCTAssertTrue(Calendar.current.isDate(decoded.date, inSameDayAs: day))
+    }
+
     func testRepositoryPersistsProjectAndTasks() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PulseboardTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

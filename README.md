@@ -56,7 +56,9 @@ Vault/
 └── Projects/
     └── 26Q4/
         ├── markdown-khranilishche/
-        │   └── Project.md
+        │   ├── Project.md
+        │   └── Statuses/
+        │       └── 2026-10-12-a1b2c3d4.md
         └── Completed Projects/
             └── diplom-zashchita/
                 └── Project.md
@@ -64,7 +66,7 @@ Vault/
 
 Старая плоская структура `Projects/<slug>/` читается без ошибок и мягко мигрирует в квартальные папки при первом сохранении.
 
-`Project.md` содержит YAML-поля `id`, `title`, `epic`, `parent_project`, `state`, `tags`, `created`, `updated`, `archived`. Короткая заметка «что сейчас» лежит в разделе `## Статус`. Задачи хранятся чекбоксами в разделе `## Задачи` и остаются совместимыми с Obsidian: дедлайн пишется прямо в строке задачи, например:
+`Project.md` содержит YAML-поля `id`, `title`, `epic`, `parent_project`, `state`, `tags`, `created`, `updated`, `archived`. Ежедневные статусы лежат в `Statuses/YYYY-MM-DD-<8hex>.md` с разделами `## Статус` и `## Блокеры` — это матрица «проект × дни» на экране «Сегодня». Задачи хранятся чекбоксами в разделе `## Задачи` и остаются совместимыми с Obsidian: дедлайн пишется прямо в строке задачи, например:
 
 ```markdown
 - [ ] Отправить макет 📅 2026-10-20 ⏰ 18:30
