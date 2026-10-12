@@ -23,13 +23,6 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.18), value: store.destination)
-            .overlay(alignment: .topLeading) {
-                if columnVisibility == .detailOnly {
-                    MiniNavMap { columnVisibility = .all }
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.25), value: columnVisibility)
         }
         .frame(minWidth: 680, minHeight: 520)
         .tint(store.palette.color)
@@ -46,6 +39,18 @@ struct ContentView: View {
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItemGroup {
+                Picker("Вид", selection: Binding(
+                    get: { store.interfaceMode },
+                    set: { store.interfaceMode = $0 }
+                )) {
+                    ForEach(InterfaceMode.allCases) { mode in
+                        Image(systemName: mode.symbol).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .help("Фокус — только срочное; Подробно — все детали")
+
                 Button { taskEditorForQuickTask() } label: { Label("Новая задача", systemImage: "plus.circle") }
                     .labelStyle(.iconOnly)
                     .keyboardShortcut("t", modifiers: .command)
@@ -57,9 +62,8 @@ struct ContentView: View {
                 Button { store.openRecentProjects() } label: { Label("Недавние проекты", systemImage: "clock") }
                     .labelStyle(.iconOnly)
                     .help("Недавние проекты (⌘E)")
-                Button { showingShortcutHelp = true } label: { Label("Горячие клавиши", systemImage: "questionmark.circle") }
-                    .labelStyle(.iconOnly)
-                    .help("Горячие клавиши")
+
+                navigationMenu
             }
         }
         .sheet(isPresented: $showingNewProject) { NewProjectView() }
@@ -84,6 +88,29 @@ struct ContentView: View {
         taskEditor = TaskEditorContext(projectID: project.id, taskID: nil)
     }
 
+    /// Нативное меню навигации: экраны с галочкой текущего и возврат панели.
+    private var navigationMenu: some View {
+        Menu {
+            Picker("Экран", selection: Binding(
+                get: { store.destination },
+                set: { store.open($0) }
+            )) {
+                ForEach(SidebarDestination.allCases) { destination in
+                    Label(destination.title, systemImage: destination.symbol).tag(destination)
+                }
+            }
+            Divider()
+            Button {
+                columnVisibility = .all
+            } label: {
+                Label("Показать боковую панель", systemImage: "sidebar.left")
+            }
+        } label: {
+            Label("Навигация", systemImage: "square.grid.2x2")
+        }
+        .help("Экраны и навигация (⌘1…⌘4)")
+    }
+
     @ViewBuilder private var destinationView: some View {
         switch store.destination {
         case .today: TodayView()
@@ -92,55 +119,6 @@ struct ContentView: View {
         case .archive: ArchiveView()
         case .settings: SettingsView()
         }
-    }
-}
-
-// MARK: - Мини-панель навигации (когда сайдбар свёрнут)
-
-private struct MiniNavMap: View {
-    @Environment(AppStore.self) private var store
-    let onShowSidebar: () -> Void
-    private let destinations: [SidebarDestination] = [.today, .projects, .search, .archive]
-
-    var body: some View {
-        GlassEffectContainer(spacing: 4) {
-            VStack(spacing: 4) {
-                Button(action: onShowSidebar) {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .help("Показать боковую панель")
-
-                ForEach(destinations) { destination in
-                    destinationButton(destination)
-                }
-            }
-            .padding(6)
-        }
-        .padding(.leading, 12)
-        .padding(.top, 10)
-    }
-
-    private func destinationButton(_ destination: SidebarDestination) -> some View {
-        let isSelected = store.destination == destination
-        return Button {
-            store.open(destination)
-        } label: {
-            Image(systemName: destination.symbol)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 30, height: 30)
-                .overlay(alignment: .topTrailing) {
-                    if destination == .today, store.urgentTaskCount > 0 {
-                        Circle().fill(.red).frame(width: 6, height: 6).offset(x: 2, y: -2)
-                    }
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.glass)
-        .tint(isSelected ? store.palette.color : .secondary)
-        .help(destination.title)
     }
 }
 

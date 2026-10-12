@@ -218,6 +218,14 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(third.palette, .teal)
     }
 
+    func testInterfaceModePersists() {
+        defer { UserDefaults.standard.removeObject(forKey: "interfaceMode") }
+        XCTAssertEqual(store.interfaceMode, .detailed, "по умолчанию подробный вид")
+
+        store.interfaceMode = .focused
+        XCTAssertEqual(AppStore(vaultURL: vaultURL).interfaceMode, .focused)
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

@@ -31,6 +31,15 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var title: String { switch self { case .system: "Системная"; case .light: "Светлая"; case .dark: "Тёмная" } }
 }
 
+/// Режим плотности интерфейса: «Фокус» — только срочное и компактные списки,
+/// «Подробно» — полные карточки, метрики и история.
+enum InterfaceMode: String, CaseIterable, Identifiable {
+    case focused, detailed
+    var id: String { rawValue }
+    var title: String { switch self { case .focused: "Фокус"; case .detailed: "Подробно" } }
+    var symbol: String { switch self { case .focused: "scope"; case .detailed: "list.bullet" } }
+}
+
 enum ProjectsPresentation: String {
     case feed, editor
     var title: String { switch self { case .feed: "Лента"; case .editor: "Редактор" } }
@@ -57,6 +66,9 @@ final class AppStore {
     var palette: AppPalette {
         didSet { UserDefaults.standard.set(palette.rawValue, forKey: Keys.palette) }
     }
+    var interfaceMode: InterfaceMode {
+        didSet { UserDefaults.standard.set(interfaceMode.rawValue, forKey: Keys.interfaceMode) }
+    }
     private(set) var vaultURL: URL
     let notifications = NotificationService()
 
@@ -72,6 +84,7 @@ final class AppStore {
     init(vaultURL: URL) {
         theme = AppTheme(rawValue: UserDefaults.standard.string(forKey: Keys.theme) ?? "system") ?? .system
         palette = AppPalette(rawValue: UserDefaults.standard.string(forKey: Keys.palette) ?? "") ?? .blue
+        interfaceMode = InterfaceMode(rawValue: UserDefaults.standard.string(forKey: Keys.interfaceMode) ?? "") ?? .detailed
         self.vaultURL = vaultURL
         repository = MarkdownRepository(rootURL: vaultURL)
         if vaultURL.startAccessingSecurityScopedResource() { scopedURL = vaultURL }
@@ -427,6 +440,7 @@ final class AppStore {
         static let bookmark = "vaultBookmark"
         static let theme = "appTheme"
         static let palette = "appPalette"
+        static let interfaceMode = "interfaceMode"
         static let lastSeenVersion = "lastSeenVersion"
     }
 }

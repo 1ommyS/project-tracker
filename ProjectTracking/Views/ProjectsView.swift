@@ -116,15 +116,24 @@ struct ProjectsView: View {
                         .frame(maxWidth: .infinity, minHeight: 280)
                 } else {
                     ForEach(filtered.groupedByQuarter(), id: \.quarter) { group in
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: store.interfaceMode == .focused ? 2 : 10) {
                             QuarterGroupLabel(quarter: group.quarter, count: group.projects.count)
                                 .padding(.horizontal, 4)
-                            ForEach(group.projects) { project in
-                                ProjectFeedCard(project: project)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            switch store.interfaceMode {
+                            case .detailed:
+                                ForEach(group.projects) { project in
+                                    ProjectFeedCard(project: project)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
+                            case .focused:
+                                ForEach(group.projects) { project in
+                                    FocusedProjectRow(project: project)
+                                        .transition(.opacity)
+                                }
                             }
                         }
                         .padding(.top, 4)
+                        .animation(.snappy, value: store.interfaceMode)
                     }
                 }
             }
@@ -263,6 +272,47 @@ struct ProjectListRow: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Компактная строка проекта (фокусный вид)
+
+private struct FocusedProjectRow: View {
+    @Environment(AppStore.self) private var store
+    let project: Project
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: project.state.symbol)
+                .font(.body.weight(.medium))
+                .foregroundStyle(project.state.color(palette: store.palette))
+                .frame(width: 20)
+            InlineEditableText(font: .body.weight(.medium),
+                               placeholder: "Название проекта",
+                               text: project.title) { newTitle in
+                Task { await store.renameProject(project, to: newTitle) }
+            }
+            QuarterTag(quarter: project.quarter, compact: true)
+            Spacer(minLength: 8)
+            if !project.openTasks.isEmpty {
+                Label("\(project.openTasks.count)", systemImage: "circle")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            ProjectStateMenu(project: project, minWidth: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .background {
+            if isHovering {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quinary)
+            }
+        }
+        .onTapGesture { store.openProject(project.id) }
+        .onHover { isHovering = $0 }
     }
 }
 

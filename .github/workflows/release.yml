@@ -93,6 +93,32 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+      - name: Sync in-app What's New
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          SOURCE=""
+          # Содержимое экрана «Что нового» берём из релизного описания,
+          # а если его нет — из свежей секции CHANGELOG.md.
+          for candidate in "releases/$VERSION.md" "releases/$RELEASE_TAG.md"; do
+            if [[ -f "$candidate" ]]; then
+              SOURCE="$candidate"
+              break
+            fi
+          done
+          mkdir -p ProjectTracking/Resources
+          if [[ -n "$SOURCE" ]]; then
+            echo "WhatsNew.md <- $SOURCE"
+            cp "$SOURCE" ProjectTracking/Resources/WhatsNew.md
+          elif [[ -f CHANGELOG.md ]] && grep -q '^## ' CHANGELOG.md; then
+            echo "WhatsNew.md <- latest CHANGELOG section"
+            awk '/^## /{if (found) exit; found=1} found' CHANGELOG.md > ProjectTracking/Resources/WhatsNew.md
+          else
+            echo "No release notes source found, keeping bundled WhatsNew.md"
+          fi
+          head -5 ProjectTracking/Resources/WhatsNew.md || true
+
       - name: Build release
         env:
           SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
