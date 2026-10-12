@@ -115,6 +115,7 @@ struct ContentView: View {
         switch store.destination {
         case .today: TodayView()
         case .projects: ProjectsView()
+        case .overdue: OverdueView()
         case .search: SearchView()
         case .archive: ArchiveView()
         case .settings: SettingsView()
@@ -127,7 +128,7 @@ struct ContentView: View {
 private struct PulseSidebar: View {
     @Environment(AppStore.self) private var store
     @State private var collapsedQuarters: Set<String> = []
-    private let primary: [SidebarDestination] = [.today, .projects, .search]
+    private let primary: [SidebarDestination] = [.today, .projects, .overdue, .search]
     private let library: [SidebarDestination] = [.archive, .settings]
 
     private var selection: Binding<SidebarDestination?> {
@@ -208,6 +209,7 @@ private struct PulseSidebar: View {
         switch destination {
         case .today: store.urgentTaskCount
         case .projects: store.activeProjects.count
+        case .overdue: store.overdueTasks.count
         case .archive: store.archivedProjects.count
         default: nil
         }

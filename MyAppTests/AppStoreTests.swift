@@ -226,6 +226,24 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(AppStore(vaultURL: vaultURL).interfaceMode, .focused)
     }
 
+    func testOverdueTasksCollectOnlyPastDueOpen() async throws {
+        let project = try await makeProject("Сроки")
+        let calendar = Calendar.current
+        var withTasks = project
+        withTasks.tasks = [
+            ProjectTask(title: "Давно просрочена", isDone: false, dueDate: calendar.date(byAdding: .day, value: -5, to: .now)),
+            ProjectTask(title: "Вчера", isDone: false, dueDate: calendar.date(byAdding: .day, value: -1, to: .now)),
+            ProjectTask(title: "Завтра", isDone: false, dueDate: calendar.date(byAdding: .day, value: 1, to: .now)),
+            ProjectTask(title: "Выполненная просроченная", isDone: true, dueDate: calendar.date(byAdding: .day, value: -3, to: .now)),
+            ProjectTask(title: "Без срока", isDone: false, dueDate: nil)
+        ]
+        store.projects[0] = withTasks
+
+        let overdue = store.overdueTasks
+        XCTAssertEqual(overdue.map(\.task.title), ["Давно просрочена", "Вчера"],
+                       "только открытые задачи с прошедшим сроком, самые старые сверху")
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

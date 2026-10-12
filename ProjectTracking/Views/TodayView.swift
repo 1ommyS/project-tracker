@@ -232,7 +232,7 @@ private struct TodaySection: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(contexts) { context in
-                    TodayTaskRow(context: context)
+                    ContextTaskRow(context: context)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
@@ -252,7 +252,7 @@ private struct TodayUnscheduledSection: View {
             DisclosureGroup(isExpanded: $expanded) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(contexts) { context in
-                        TodayTaskRow(context: context)
+                        ContextTaskRow(context: context)
                     }
                 }
                 .padding(.top, 8)
@@ -273,73 +273,4 @@ private struct TodayUnscheduledSection: View {
     }
 }
 
-private struct TodayTaskRow: View {
-    @Environment(AppStore.self) private var store
-    let context: TaskContext
-    @State private var editor: TaskEditorContext?
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Button {
-                Task { await store.toggleTask(context.task, in: context.project) }
-            } label: {
-                Image(systemName: context.task.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(context.task.isDone ? PulseStyle.mint : .secondary)
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 2) {
-                InlineEditableText(font: .body,
-                                   lineLimit: nil,
-                                   tooltip: "Клик — переименовать задачу",
-                                   placeholder: "Задача",
-                                   text: context.task.title) { newTitle in
-                    Task { await store.renameTask(context.task, to: newTitle, in: context.project) }
-                }
-                Button {
-                    store.openProject(context.project.id)
-                } label: {
-                    Label(context.project.pathLabel.isEmpty ? context.project.title : context.project.pathLabel,
-                          systemImage: "square.stack.3d.up")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.tint)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .pointingHandOnHover()
-            }
-
-            Spacer(minLength: 8)
-
-            InlineEditableDate(date: context.task.dueDate, isDone: context.task.isDone) { newDate in
-                Task { await store.setTaskDueDate(context.task, to: newDate, in: context.project) }
-            }
-
-            Button {
-                editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
-            } label: {
-                Image(systemName: "pencil.circle")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Редактировать задачу")
-        }
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button("Отметить выполненной", systemImage: "checkmark.circle.fill") {
-                Task { await store.toggleTask(context.task, in: context.project) }
-            }
-            Button("Редактировать…", systemImage: "pencil") {
-                editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
-            }
-            Divider()
-            Button("Удалить", systemImage: "trash", role: .destructive) {
-                Task { await store.deleteTask(context.task, in: context.project) }
-            }
-        }
-        .sheet(item: $editor) { context in TaskEditorView(context: context) }
-    }
-}

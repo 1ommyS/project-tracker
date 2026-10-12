@@ -3,12 +3,13 @@ import Foundation
 import Observation
 
 enum SidebarDestination: String, CaseIterable, Identifiable {
-    case today, projects, search, archive, settings
+    case today, projects, overdue, search, archive, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .today: "Сегодня"
         case .projects: "Проекты"
+        case .overdue: "Просрочено"
         case .search: "Поиск"
         case .archive: "Архив"
         case .settings: "Настройки"
@@ -18,6 +19,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         switch self {
         case .today: "sun.max.fill"
         case .projects: "square.stack.3d.up.fill"
+        case .overdue: "clock.badge.exclamationmark"
         case .search: "magnifyingglass"
         case .archive: "archivebox.fill"
         case .settings: "gearshape.fill"
@@ -97,6 +99,13 @@ final class AppStore {
 
     var allOpenTasks: [TaskContext] {
         activeProjects.flatMap { project in project.openTasks.map { TaskContext(project: project, task: $0) } }
+    }
+
+    /// Все просроченные открытые задачи, самые старые сверху.
+    var overdueTasks: [TaskContext] {
+        allOpenTasks
+            .filter { context in context.task.dueDate.map { $0 < .now } ?? false }
+            .sorted { ($0.task.dueDate ?? .distantPast) < ($1.task.dueDate ?? .distantPast) }
     }
 
     /// Просроченные и назначенные на сегодня — для бейджа «Сегодня».

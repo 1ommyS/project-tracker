@@ -34,8 +34,9 @@ struct ProjectTrackingApp: App {
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)
                 Button("Проекты") { store.open(.projects) }.keyboardShortcut("2", modifiers: .command)
-                Button("Поиск") { store.open(.search) }.keyboardShortcut("3", modifiers: .command)
-                Button("Архив") { store.open(.archive) }.keyboardShortcut("4", modifiers: .command)
+                Button("Просрочено") { store.open(.overdue) }.keyboardShortcut("3", modifiers: .command)
+                Button("Поиск") { store.open(.search) }.keyboardShortcut("4", modifiers: .command)
+                Button("Архив") { store.open(.archive) }.keyboardShortcut("5", modifiers: .command)
             }
         }
         Settings {
