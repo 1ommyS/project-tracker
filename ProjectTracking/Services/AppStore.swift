@@ -3,13 +3,12 @@ import Foundation
 import Observation
 
 enum SidebarDestination: String, CaseIterable, Identifiable {
-    case today, projects, activity, search, archive, settings
+    case today, projects, search, archive, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .today: "Сегодня"
         case .projects: "Проекты"
-        case .activity: "Активность"
         case .search: "Поиск"
         case .archive: "Архив"
         case .settings: "Настройки"
@@ -19,7 +18,6 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         switch self {
         case .today: "sun.max.fill"
         case .projects: "square.stack.3d.up.fill"
-        case .activity: "clock.arrow.circlepath"
         case .search: "magnifyingglass"
         case .archive: "archivebox.fill"
         case .settings: "gearshape.fill"
@@ -33,25 +31,27 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var title: String { switch self { case .system: "Системная"; case .light: "Светлая"; case .dark: "Тёмная" } }
 }
 
+enum ProjectsPresentation: String {
+    case feed, editor
+    var title: String { switch self { case .feed: "Лента"; case .editor: "Редактор" } }
+}
+
 @MainActor @Observable
 final class AppStore {
     var projects: [Project] = []
-    var destination: SidebarDestination = .today
-    var selectedProjectID: UUID?
+    var destination: SidebarDestination = .today { didSet { pushNavigation() } }
+    var selectedProjectID: UUID? { didSet { pushNavigation() } }
+    var projectsPresentation: ProjectsPresentation = .feed { didSet { pushNavigation() } }
     var isLoading = true
     var errorMessage: String?
     var searchQuery = ""
     var searchFocusRequest = 0
     var recentProjectsRequest = 0
     var shortcutHelpRequest = 0
-    var statusEditorRequest = 0
     var quickTaskRequest = 0
     var quickTaskProjectID: UUID?
     var theme: AppTheme {
         didSet { UserDefaults.standard.set(theme.rawValue, forKey: Keys.theme) }
-    }
-    var statusTemplate: String {
-        didSet { UserDefaults.standard.set(statusTemplate, forKey: Keys.template) }
     }
     private(set) var vaultURL: URL
     let notifications = NotificationService()
@@ -61,21 +61,34 @@ final class AppStore {
     private var scopedURL: URL?
     private var selfWriteUntil = Date.distantPast
 
-    init() {
+    convenience init() {
+        self.init(vaultURL: Self.resolveStoredVault() ?? Self.defaultVaultURL)
+    }
+
+    init(vaultURL: URL) {
         theme = AppTheme(rawValue: UserDefaults.standard.string(forKey: Keys.theme) ?? "system") ?? .system
-        statusTemplate = UserDefaults.standard.string(forKey: Keys.template) ?? "- Что сделано сегодня?\n- Что дальше?\n- Что мешает?"
-        let resolved = Self.resolveStoredVault() ?? Self.defaultVaultURL
-        vaultURL = resolved
-        repository = MarkdownRepository(rootURL: resolved)
-        if resolved.startAccessingSecurityScopedResource() { scopedURL = resolved }
+        self.vaultURL = vaultURL
+        repository = MarkdownRepository(rootURL: vaultURL)
+        if vaultURL.startAccessingSecurityScopedResource() { scopedURL = vaultURL }
+        notifications.onEvent = { [weak self] event in self?.handle(event) }
     }
 
     var activeProjects: [Project] { projects.filter { !$0.isArchived && $0.state != .archived && $0.state != .done } }
     var archivedProjects: [Project] { projects.filter { $0.isArchived || $0.state == .archived || $0.state == .done } }
     var selectedProject: Project? { projects.first { $0.id == selectedProjectID } }
-    var activity: [ActivityItem] {
-        projects.flatMap { project in project.statuses.map { ActivityItem(id: $0.id, projectID: project.id, projectTitle: project.pathLabel, status: $0) } }
-            .sorted { $0.status.date > $1.status.date }
+
+    var allOpenTasks: [TaskContext] {
+        activeProjects.flatMap { project in project.openTasks.map { TaskContext(project: project, task: $0) } }
+    }
+
+    /// Просроченные и назначенные на сегодня — для бейджа «Сегодня».
+    var urgentTaskCount: Int {
+        let calendar = Calendar.current
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now)) ?? .now
+        return allOpenTasks.filter { context in
+            guard let due = context.task.dueDate else { return false }
+            return due < endOfToday
+        }.count
     }
 
     func openSearch() {
@@ -95,8 +108,60 @@ final class AppStore {
         self.destination = destination
     }
 
-    func openStatusEditor() {
-        statusEditorRequest &+= 1
+    func openProject(_ id: UUID) {
+        selectedProjectID = id
+        projectsPresentation = .editor
+        destination = .projects
+    }
+
+    func openProjectsList() {
+        projectsPresentation = .feed
+        destination = .projects
+    }
+
+    // MARK: - История навигации
+
+    struct NavigationState: Equatable {
+        var destination: SidebarDestination
+        var projectID: UUID?
+        var presentation: ProjectsPresentation
+    }
+
+    private var navigationHistory: [NavigationState] = []
+    private var navigationIndex = -1
+    private var isRestoringNavigation = false
+
+    var canGoBack: Bool { navigationIndex > 0 }
+    var canGoForward: Bool { navigationIndex < navigationHistory.count - 1 }
+
+    func goBack() {
+        guard navigationIndex > 0 else { return }
+        navigationIndex -= 1
+        restoreNavigation(navigationHistory[navigationIndex])
+    }
+
+    func goForward() {
+        guard navigationIndex < navigationHistory.count - 1 else { return }
+        navigationIndex += 1
+        restoreNavigation(navigationHistory[navigationIndex])
+    }
+
+    private func restoreNavigation(_ state: NavigationState) {
+        isRestoringNavigation = true
+        destination = state.destination
+        selectedProjectID = state.projectID
+        projectsPresentation = state.presentation
+        isRestoringNavigation = false
+    }
+
+    private func pushNavigation() {
+        guard !isRestoringNavigation else { return }
+        let state = NavigationState(destination: destination, projectID: selectedProjectID, presentation: projectsPresentation)
+        if navigationIndex >= 0, navigationHistory[navigationIndex] == state { return }
+        navigationHistory.removeSubrange(min(navigationIndex + 1, navigationHistory.count)...)
+        navigationHistory.append(state)
+        if navigationHistory.count > 60 { navigationHistory.removeFirst(navigationHistory.count - 60) }
+        navigationIndex = navigationHistory.count - 1
     }
 
     func openQuickTask() {
@@ -112,16 +177,20 @@ final class AppStore {
 
     func start() async {
         await reload()
-        await notifications.refreshAuthorization()
-        if notifications.authorization == .allowed { await notifications.sync(projects: projects) }
         observeVault(at: vaultURL)
+        // Разрешение спрашиваем при первом запуске: без него напоминания
+        // о сроках не появятся никогда, а пользователь этого не узнает.
+        await notifications.authorizeAndSync(projects: projects)
     }
 
     func reload(showSpinner: Bool = true) async {
         if showSpinner { isLoading = true }
         do {
             projects = try await repository.loadProjects()
-            if selectedProjectID == nil { selectedProjectID = projects.first?.id }
+            // Холостое присваивание nil→nil попало бы в историю навигации.
+            if selectedProjectID == nil, let first = projects.first?.id {
+                selectedProjectID = first
+            }
             errorMessage = nil
         } catch {
             errorMessage = "Не удалось прочитать хранилище: \(error.localizedDescription)"
@@ -133,17 +202,17 @@ final class AppStore {
     }
 
     func createProject(title: String, epic: String, parentProject: String, summary: String, tags: [String], state: ProjectState) async -> Project? {
-        var project = Project(id: UUID(), title: title, epic: epic, parentProject: parentProject,
+        let project = Project(id: UUID(), title: title, epic: epic, parentProject: parentProject,
                               summary: summary, tags: tags, state: state,
-                              tasks: [], notes: "", createdAt: .now, updatedAt: .now,
-                              isArchived: false, statuses: [], folderURL: nil)
+                              tasks: [], createdAt: .now, updatedAt: .now,
+                              isArchived: false, folderURL: nil)
         do {
             markSelfWrite()
-            project = try await repository.saveProject(project)
-            projects.insert(project, at: 0)
-            selectedProjectID = project.id
+            let saved = try await repository.saveProject(project)
+            replace(saved)
+            selectedProjectID = saved.id
             destination = .projects
-            return project
+            return saved
         } catch { errorMessage = error.localizedDescription; return nil }
     }
 
@@ -155,34 +224,58 @@ final class AppStore {
             markSelfWrite()
             let saved = try await repository.saveProject(value)
             replace(saved)
-            let notificationScheduleChanged = previous?.tasks != saved.tasks || previous?.isArchived != saved.isArchived
-            if notificationScheduleChanged {
-                if saved.tasks.contains(where: { $0.dueDate != nil }) {
-                    await notifications.ensureAccessAndSync(projects: projects)
-                } else if notifications.authorization == .allowed {
-                    await notifications.sync(projects: projects)
+            let tasksChanged = previous?.tasks != saved.tasks || previous?.isArchived != saved.isArchived
+            if tasksChanged {
+                if saved.tasks.contains(where: { !$0.isDone && $0.dueDate != nil }) {
+                    await notifications.authorizeAndSync(projects: projects)
+                } else {
+                    await notifications.syncIfAllowed(projects: projects)
                 }
             }
         } catch { errorMessage = "Не удалось сохранить проект: \(error.localizedDescription)" }
     }
 
-    func saveStatus(_ value: DailyStatus, projectID: UUID) async {
-        guard var project = projects.first(where: { $0.id == projectID }) else { return }
-        var status = value
-        status.projectTitle = project.pathLabel
-        status.projectID = project.id
-        status.updatedAt = .now
-        do {
-            markSelfWrite()
-            let saved = try await repository.saveStatus(status, for: project)
-            if let index = project.statuses.firstIndex(where: { $0.id == saved.id }) { project.statuses[index] = saved }
-            else { project.statuses.append(saved) }
-            project.statuses.sort { $0.date > $1.date }
-            project.state = saved.state
-            project.updatedAt = .now
-            project = try await repository.saveProject(project)
-            replace(project)
-        } catch { errorMessage = "Не удалось сохранить статус: \(error.localizedDescription)" }
+    // MARK: - Задачи
+
+    func addTask(title: String, dueDate: Date?, to project: Project) async {
+        var value = project
+        value.tasks.append(ProjectTask(title: title, isDone: false, dueDate: dueDate))
+        await saveProject(value)
+    }
+
+    func toggleTask(_ task: ProjectTask, in project: Project) async {
+        var value = task
+        value.isDone.toggle()
+        await updateTask(value, in: project)
+    }
+
+    func updateTask(_ task: ProjectTask, in project: Project) async {
+        var value = project
+        guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        value.tasks[index] = task
+        await saveProject(value)
+    }
+
+    func deleteTask(_ task: ProjectTask, in project: Project) async {
+        var value = project
+        value.tasks.removeAll { $0.id == task.id }
+        await saveProject(value)
+    }
+
+    // MARK: - Инлайн-переименование
+
+    func renameProject(_ project: Project, to newTitle: String) async {
+        guard let title = newTitle.nilIfBlank, title != project.title else { return }
+        var value = project
+        value.title = title
+        await saveProject(value)
+    }
+
+    func renameTask(_ task: ProjectTask, to newTitle: String, in project: Project) async {
+        guard let title = newTitle.nilIfBlank, title != task.title else { return }
+        var value = task
+        value.title = title
+        await updateTask(value, in: project)
     }
 
     func archive(_ project: Project) async {
@@ -205,9 +298,7 @@ final class AppStore {
             try await repository.deleteProject(project)
             projects.removeAll { $0.id == project.id }
             if selectedProjectID == project.id { selectedProjectID = projects.first?.id }
-            if notifications.authorization == .allowed {
-                await notifications.sync(projects: projects)
-            }
+            await notifications.syncIfAllowed(projects: projects)
         } catch { errorMessage = "Не удалось переместить проект в Корзину: \(error.localizedDescription)" }
     }
 
@@ -237,24 +328,30 @@ final class AppStore {
         let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
         var result: [SearchHit] = []
         for project in projects {
-            if project.title.range(of: needle, options: options) != nil || project.summary.range(of: needle, options: options) != nil || project.tags.contains(where: { $0.range(of: needle, options: options) != nil }) {
-                result.append(SearchHit(id: "project-\(project.id)", projectID: project.id, statusID: nil, kind: .project,
+            if project.title.range(of: needle, options: options) != nil
+                || project.summary.range(of: needle, options: options) != nil
+                || project.tags.contains(where: { $0.range(of: needle, options: options) != nil }) {
+                result.append(SearchHit(id: "project-\(project.id)", projectID: project.id, kind: .project,
                                         title: project.title, excerpt: excerpt(from: project.summary, matching: needle), date: project.updatedAt))
             }
-            if let task = project.tasks.first(where: { $0.title.range(of: needle, options: options) != nil }) {
-                result.append(SearchHit(id: "task-\(project.id)-\(task.id)", projectID: project.id, statusID: nil, kind: .project,
-                                        title: project.title, excerpt: task.title, date: project.updatedAt))
-            }
-            if project.notes.range(of: needle, options: options) != nil {
-                result.append(SearchHit(id: "note-\(project.id)", projectID: project.id, statusID: nil, kind: .note,
-                                        title: project.title, excerpt: excerpt(from: project.notes, matching: needle), date: project.updatedAt))
-            }
-            for status in project.statuses where status.searchableText.range(of: needle, options: options) != nil {
-                result.append(SearchHit(id: "status-\(status.id)", projectID: project.id, statusID: status.id, kind: .status,
-                                        title: project.title, excerpt: excerpt(from: status.searchableText, matching: needle), date: status.date))
+            for task in project.tasks where task.title.range(of: needle, options: options) != nil {
+                result.append(SearchHit(id: "task-\(task.id)", projectID: project.id, kind: .task,
+                                        title: task.title, excerpt: project.pathLabel.isEmpty ? project.title : project.pathLabel,
+                                        date: task.dueDate ?? project.updatedAt))
             }
         }
         return result.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+    }
+
+    private func handle(_ event: NotificationService.Event) {
+        switch event {
+        case .openProject(let id):
+            openProject(id)
+        case .completeTask(let projectID, let taskID):
+            guard let project = projects.first(where: { $0.id == projectID }),
+                  let task = project.tasks.first(where: { $0.id == taskID }) else { return }
+            Task { await toggleTask(task, in: project) }
+        }
     }
 
     private func excerpt(from text: String, matching query: String) -> String {
@@ -267,9 +364,14 @@ final class AppStore {
     }
 
     private func replace(_ project: Project) {
-        if let index = projects.firstIndex(where: { $0.id == project.id }) { projects[index] = project }
-        else { projects.append(project) }
-        projects.sort { $0.updatedAt > $1.updatedAt }
+        // Порядок массива намеренно не меняем: пересортировка при каждом
+        // автосохранении дёргает списки и сбивает фокус в поле ввода.
+        // Порядок отображения задают экранные вычисления, с диска — reload().
+        if let index = projects.firstIndex(where: { $0.id == project.id }) {
+            projects[index] = project
+        } else {
+            projects.append(project)
+        }
     }
 
     private func markSelfWrite() { selfWriteUntil = Date().addingTimeInterval(1.2) }
@@ -295,6 +397,5 @@ final class AppStore {
     private enum Keys {
         static let bookmark = "vaultBookmark"
         static let theme = "appTheme"
-        static let template = "statusTemplate"
     }
 }

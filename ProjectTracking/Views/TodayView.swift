@@ -2,61 +2,99 @@ import SwiftUI
 
 struct TodayView: View {
     @Environment(AppStore.self) private var store
-    let onUpdate: (Project) -> Void
-    let onUpdateAll: () -> Void
+    @Environment(\.calendar) private var calendar
 
-    private var pending: [Project] { store.activeProjects.filter { !$0.isUpdatedToday() } }
-    private var groupedProjects: [(String, [Project])] {
-        Dictionary(grouping: store.activeProjects, by: { $0.epic.nilIfBlank ?? "Без эпика" })
-            .map { ($0.key, $0.value.sorted { $0.pathLabel < $1.pathLabel }) }.sorted { $0.0 < $1.0 }
+    private var openTasks: [TaskContext] { store.allOpenTasks }
+
+    private var overdue: [TaskContext] {
+        let startOfDay = calendar.startOfDay(for: .now)
+        return openTasks
+            .filter { context in context.task.dueDate.map { $0 < startOfDay } ?? false }
+            .sorted { ($0.task.dueDate ?? .now) < ($1.task.dueDate ?? .now) }
     }
+
+    private var dueToday: [TaskContext] {
+        openTasks
+            .filter { context in context.task.dueDate.map { calendar.isDateInToday($0) } ?? false }
+            .sorted { ($0.task.dueDate ?? .now) < ($1.task.dueDate ?? .now) }
+    }
+
+    private var upcoming: [TaskContext] {
+        let startOfDay = calendar.startOfDay(for: .now)
+        let horizon = calendar.date(byAdding: .day, value: 8, to: startOfDay) ?? startOfDay
+        return openTasks
+            .filter { context in
+                guard let due = context.task.dueDate, due > startOfDay, due < horizon, !calendar.isDateInToday(due) else { return false }
+                return true
+            }
+            .sorted { ($0.task.dueDate ?? .now) < ($1.task.dueDate ?? .now) }
+    }
+
+    private var unscheduled: [TaskContext] {
+        openTasks
+            .filter { $0.task.dueDate == nil }
+            .sorted { $0.project.pathLabel.localizedCaseInsensitiveCompare($1.project.pathLabel) == .orderedAscending }
+    }
+
+    private var doneCount: Int { store.activeProjects.reduce(0) { $0 + $1.doneTasks.count } }
+    private var totalCount: Int { store.activeProjects.reduce(0) { $0 + $1.tasks.count } }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                TodayHero(total: store.activeProjects.count, completed: store.activeProjects.count - pending.count,
-                          pending: pending.count, onUpdateAll: onUpdateAll)
+                TodayHero(total: totalCount, done: doneCount,
+                          dueToday: dueToday.count, overdue: overdue.count,
+                          onOpenProjects: { store.open(.projects) })
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-                    MetricCard(value: "\(store.activeProjects.count)", label: "активных", symbol: "square.stack.3d.up", tint: .blue)
-                    MetricCard(value: "\(store.activeProjects.count - pending.count)", label: "обновлено", symbol: "checkmark.circle", tint: .green)
-                    MetricCard(value: "\(pending.count)", label: "ждут статуса", symbol: "clock", tint: pending.isEmpty ? .green : .orange)
+                    MetricCard(value: "\(openTasks.count)", label: "открытых задач", symbol: "circle.stack", tint: .blue)
+                    MetricCard(value: "\(dueToday.count)", label: "на сегодня", symbol: "sun.max.fill", tint: dueToday.isEmpty ? .green : PulseStyle.amber)
+                    MetricCard(value: "\(overdue.count)", label: "просрочено", symbol: "exclamationmark.triangle.fill", tint: overdue.isEmpty ? .green : .red)
                 }
 
-                if store.activeProjects.isEmpty {
-                    EmptyState(symbol: "square.stack.3d.up.slash", title: "Нет активных проектов", message: "Создайте проект кнопкой + в панели инструментов.")
+                if store.projects.isEmpty {
+                    EmptyState(symbol: "square.stack.3d.up.slash", title: "Пока нет проектов",
+                               message: "Создайте первый проект — и его задачи появятся здесь.")
+                        .frame(maxWidth: .infinity, minHeight: 280)
+                } else if openTasks.isEmpty {
+                    EmptyState(symbol: "checkmark.seal.fill", title: "Все задачи выполнены",
+                               message: "Открытых задач нет. Добавьте новую в любом проекте — поле быстрого ввода ждёт в ленте проектов.")
                         .frame(maxWidth: .infinity, minHeight: 280)
                 } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                SectionEyebrow(text: "Фокус на сегодня")
-                                Text("Активные проекты").font(.title2.bold())
-                            }
-                            Spacer()
-                            Text("\(store.activeProjects.count) всего").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                        }
-                        ForEach(groupedProjects, id: \.0) { epic, projects in
-                            HStack(spacing: 7) {
-                                Image(systemName: "square.3.layers.3d.top.filled").foregroundStyle(PulseStyle.indigo)
-                                Text(epic).font(.subheadline.bold())
-                                Text("\(projects.count)").font(.caption2.bold()).foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 2).background(.secondary.opacity(0.1), in: Capsule())
-                            }.padding(.top, 8)
-                            ForEach(projects) { project in TodayProjectCard(project: project, onUpdate: { onUpdate(project) }) }
-                        }
+                    if !overdue.isEmpty {
+                        TodaySection(title: "Просроченные задачи",
+                                     symbol: "exclamationmark.triangle.fill", tint: .red, contexts: overdue)
+                    }
+                    if !dueToday.isEmpty {
+                        TodaySection(title: "Задачи на сегодня",
+                                     symbol: "sun.max.fill", tint: PulseStyle.blue, contexts: dueToday)
+                    }
+                    if !upcoming.isEmpty {
+                        TodaySection(title: "Предстоящие задачи",
+                                     symbol: "clock.arrow.circlepath", tint: PulseStyle.indigo, contexts: upcoming)
+                    }
+                    if !unscheduled.isEmpty {
+                        TodayUnscheduledSection(contexts: unscheduled)
                     }
                 }
             }
-            .padding(28).frame(maxWidth: 1050, alignment: .leading)
+            .padding(PulseMetrics.screen)
+            .frame(maxWidth: PulseMetrics.contentWidth, alignment: .leading)
         }
         .softScrollFade()
+        .navigationTitle("Сегодня")
     }
 }
 
+// MARK: - Шапка
+
 private struct TodayHero: View {
-    let total: Int, completed: Int, pending: Int
-    let onUpdateAll: () -> Void
-    private var progress: Double { total == 0 ? 1 : Double(completed) / Double(total) }
+    let total: Int, done: Int, dueToday: Int, overdue: Int
+    let onOpenProjects: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var progress: Double { total == 0 ? 1 : Double(done) / Double(total) }
+
     private var greeting: String {
         switch Calendar.current.component(.hour, from: .now) {
         case 5..<12: "Доброе утро"
@@ -64,58 +102,51 @@ private struct TodayHero: View {
         default: "Добрый вечер"
         }
     }
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 26) {
-                heroCopy
-                Spacer(minLength: 20)
-                progressRing
-            }
-            VStack(alignment: .leading, spacing: 18) {
-                heroCopy
-                HStack { Spacer(); progressRing; Spacer() }
-            }
-        }
-        .padding(24)
-        .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(LinearGradient(colors: [PulseStyle.blue.opacity(0.13), PulseStyle.indigo.opacity(0.06), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .pulsePanel(radius: 24)
+
+    private var headline: String {
+        if total == 0 { return "Задач пока нет — самое время их добавить." }
+        if overdue > 0 { return "Просрочено задач: \(overdue). Начните с них — они ждут дольше всех." }
+        if dueToday > 0 { return "На сегодня задач: \(dueToday). Ровно столько, сколько нужно для хорошего дня." }
+        return "Срочных задач нет. Всё под контролем."
     }
 
-    private var heroCopy: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SectionEyebrow(text: Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-            Text(greeting).font(.system(size: 34, weight: .bold, design: .rounded)).minimumScaleFactor(0.75)
-            Text(pending == 0 ? "Все проекты обновлены. Можно спокойно двигаться дальше." : "Соберите ритм дня — осталось обновить \(pending) \(projectWord(pending)).")
-                .font(.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if pending > 0 {
-                Button("Начать ежедневный обзор", systemImage: "arrow.right.circle.fill", action: onUpdateAll)
-                    .buttonStyle(.borderedProminent).controlSize(.large).padding(.top, 5)
+    var body: some View {
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(greeting).font(.largeTitle.bold())
+                Text(headline)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if dueToday + overdue > 0 {
+                    Button("Открыть проекты", systemImage: "arrow.right.circle.fill", action: onOpenProjects)
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 4)
+                }
             }
+            Spacer(minLength: 12)
+            progressRing
         }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
     private var progressRing: some View {
         ZStack {
-            Circle().stroke(.secondary.opacity(0.12), lineWidth: 10)
+            Circle().stroke(.quaternary, lineWidth: 8)
             Circle().trim(from: 0, to: progress).stroke(
-                AngularGradient(colors: [PulseStyle.blue, PulseStyle.mint, PulseStyle.blue], center: .center),
-                style: StrokeStyle(lineWidth: 10, lineCap: .round)
-            ).rotationEffect(.degrees(-90)).animation(.spring, value: progress)
+                AngularGradient(colors: [.blue, .mint, .blue], center: .center),
+                style: StrokeStyle(lineWidth: 8, lineCap: .round)
+            ).rotationEffect(.degrees(-90)).animation(reduceMotion ? nil : .spring, value: progress)
             VStack(spacing: 0) {
-                Text("\(Int(progress * 100))%").font(.system(size: 24, weight: .bold, design: .rounded))
-                Text("готово").font(.caption2).foregroundStyle(.secondary)
+                Text("\(Int(progress * 100))%").font(.title3.bold()).monospacedDigit()
+                Text("выполнено").font(.caption2).foregroundStyle(.secondary)
             }
-        }.frame(width: 108, height: 108).padding(.trailing, 6)
-    }
-
-    private func projectWord(_ count: Int) -> String {
-        let mod10 = count % 10, mod100 = count % 100
-        if mod10 == 1 && mod100 != 11 { return "проект" }
-        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "проекта" }
-        return "проектов"
+        }
+        .frame(width: 88, height: 88)
     }
 }
 
@@ -123,214 +154,149 @@ private struct MetricCard: View {
     let value: String, label: String, symbol: String
     let tint: Color
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol).font(.title2).foregroundStyle(tint).frame(width: 35, height: 35)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(tint)
             VStack(alignment: .leading, spacing: 0) {
-                Text(value).font(.title2.bold())
+                Text(value).font(.title2.bold()).monospacedDigit().contentTransition(.numericText())
                 Text(label).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
         }
-        .padding(16).frame(maxWidth: .infinity)
-        .pulsePanel(radius: 16)
+        .padding(PulseMetrics.card).frame(maxWidth: .infinity)
+        .pulsePanel(radius: 12)
+        .animation(.snappy, value: value)
     }
 }
 
-private struct TodayProjectCard: View {
-    let project: Project
-    let onUpdate: () -> Void
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 16) {
-                statusMarker
-                projectCopy
-                Spacer(minLength: 12)
-                statusButton
-            }
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 14) { statusMarker; projectCopy }
-                statusButton.frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        }
-        .padding(18).pulsePanel(radius: 18)
-        .animation(.snappy, value: project.isUpdatedToday())
-        .contextMenu { Button("Обновить статус", action: onUpdate) }
-    }
+// MARK: - Секции задач
 
-    private var statusMarker: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 3).fill(project.isUpdatedToday() ? PulseStyle.mint : PulseStyle.amber).frame(width: 4, height: 58)
-            Image(systemName: project.isUpdatedToday() ? "checkmark.circle.fill" : "circle.dashed")
-                .font(.title2).foregroundStyle(project.isUpdatedToday() ? PulseStyle.mint : PulseStyle.amber)
-        }
-    }
-
-    private var projectCopy: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                HStack { Text(project.title).font(.headline); StateBadge(state: project.state) }
-                VStack(alignment: .leading, spacing: 5) { Text(project.title).font(.headline); StateBadge(state: project.state) }
-            }
-            if project.breadcrumb.count > 1 {
-                FadeOverflowRow { Text(project.pathLabel).font(.caption.weight(.medium)).foregroundStyle(PulseStyle.blue) }
-            }
-            if let status = project.latestStatus {
-                Text(status.completed.nilIfBlank ?? status.plans.nilIfBlank ?? "Статус без текста").lineLimit(2).foregroundStyle(.secondary)
-                if let blocker = status.blockers.nilIfBlank { Label(blocker, systemImage: "exclamationmark.triangle.fill").font(.caption.weight(.medium)).foregroundStyle(.red).lineLimit(2) }
-                Text("Обновлено \(status.date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(.tertiary)
-            } else { Text("Статусов ещё нет").foregroundStyle(.secondary) }
-        }
-    }
-
-    @ViewBuilder private var statusButton: some View {
-        if project.isUpdatedToday() { Button("Изменить", action: onUpdate).buttonStyle(.bordered) }
-        else { Button("Добавить статус", action: onUpdate).buttonStyle(.borderedProminent) }
-    }
-}
-
-struct StatusEditorView: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    let project: Project
-    let onSave: (DailyStatus, Bool) async -> Void
-    @State private var date = Date.now
-    @State private var state: ProjectState
-    @State private var completed = ""
-    @State private var plans = ""
-    @State private var blockers = ""
-    @State private var notes = ""
-    @State private var editingID = UUID()
-    @State private var createdAt = Date.now
-    @State private var fileURL: URL?
-    @State private var saving = false
-
-    init(project: Project, initialDate: Date = .now, onSave: @escaping (DailyStatus, Bool) async -> Void) {
-        self.project = project
-        self.onSave = onSave
-        _date = State(initialValue: initialDate)
-        _state = State(initialValue: project.state)
-        if let existing = project.statuses.first(where: { Calendar.current.isDate($0.date, inSameDayAs: initialDate) }) {
-            _date = State(initialValue: existing.date); _state = State(initialValue: existing.state)
-            _completed = State(initialValue: existing.completed); _plans = State(initialValue: existing.plans)
-            _blockers = State(initialValue: existing.blockers); _notes = State(initialValue: existing.notes)
-            _editingID = State(initialValue: existing.id); _createdAt = State(initialValue: existing.createdAt)
-            _fileURL = State(initialValue: existing.fileURL)
-        }
-    }
+private struct TodaySection: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    let contexts: [TaskContext]
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Статус на \(date.formatted(date: .abbreviated, time: .omitted))").font(.title2.bold())
-                    Text(project.pathLabel).font(.subheadline.weight(.medium)).foregroundStyle(PulseStyle.blue)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).foregroundStyle(tint).font(.body.weight(.medium))
+                Text(title).font(.title3.bold())
+                Spacer()
+                Text("\(contexts.count)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(contexts) { context in
+                    TodayTaskRow(context: context)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                Spacer(); StateBadge(state: state)
-            }.padding(22)
-            Divider()
-            Form {
-                Section {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 18) {
-                            statusDateSelector
-                            statePicker.frame(maxWidth: 230)
-                        }
-                        VStack(alignment: .leading, spacing: 14) {
-                            statusDateSelector
-                            statePicker
-                        }
+            }
+            .padding(PulseMetrics.card)
+            .pulsePanel(radius: 12)
+            .animation(.snappy, value: contexts.map(\.id))
+        }
+    }
+}
+
+private struct TodayUnscheduledSection: View {
+    let contexts: [TaskContext]
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DisclosureGroup(isExpanded: $expanded) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(contexts) { context in
+                        TodayTaskRow(context: context)
                     }
                 }
-                StatusField(title: "Выполнено", hint: "Что изменилось и какой результат получен?", text: $completed)
-                StatusField(title: "Планы", hint: "Следующие конкретные шаги", text: $plans)
-                StatusField(title: "Блокеры", hint: "Что мешает двигаться дальше?", text: $blockers, tint: .red)
-                StatusField(title: "Заметки", hint: "Markdown, [[WikiLinks]], #теги", text: $notes)
-            }.formStyle(.grouped).scrollContentBackground(.hidden)
-            Divider()
-            HStack {
-                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Сохранить") { save(advance: false) }.keyboardShortcut(.defaultAction).disabled(saving || !hasContent)
-                Button("Сохранить и дальше") { save(advance: true) }.buttonStyle(.borderedProminent).disabled(saving || !hasContent)
-            }.padding(18)
-        }
-        .frame(minWidth: 500, idealWidth: 680, maxWidth: 760, minHeight: 520, idealHeight: 680, maxHeight: 820)
-        .onAppear {
-            if project.statuses.first(where: { Calendar.current.isDate($0.date, inSameDayAs: date) }) == nil,
-               completed.isEmpty, plans.isEmpty, blockers.isEmpty, notes.isEmpty {
-                notes = store.statusTemplate
+                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "tray").foregroundStyle(.secondary).font(.body.weight(.medium))
+                    Text("Без срока").font(.title3.bold())
+                    Spacer()
+                    Text("\(contexts.count)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
+            .padding(PulseMetrics.card)
+            .pulsePanel(radius: 12)
         }
-        .onChange(of: date) { _, newDate in loadStatus(for: newDate) }
-    }
-
-    private var statePicker: some View {
-        Picker("Состояние", selection: $state) {
-            ForEach(ProjectState.allCases.filter { $0 != .archived }) { Text($0.title).tag($0) }
-        }
-    }
-
-    private var statusDateSelector: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Дата статуса").font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 7) {
-                Button { shiftDate(by: -1) } label: { Image(systemName: "chevron.left") }
-                    .help("Предыдущий день")
-                quickDateButton("Вчера", date: Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now)
-                quickDateButton("Сегодня", date: .now)
-                DatePicker("Выбрать дату", selection: $date, displayedComponents: .date)
-                    .labelsHidden().help("Выбрать дату в календаре")
-                Button { shiftDate(by: 1) } label: { Image(systemName: "chevron.right") }
-                    .help("Следующий день")
-            }
-            Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide).year()))
-                .font(.caption.weight(.medium)).foregroundStyle(PulseStyle.blue)
-        }
-    }
-
-    @ViewBuilder
-    private func quickDateButton(_ title: String, date target: Date) -> some View {
-        if Calendar.current.isDate(date, inSameDayAs: target) {
-            Button(title) { date = Calendar.current.startOfDay(for: target) }.buttonStyle(.borderedProminent)
-        } else {
-            Button(title) { date = Calendar.current.startOfDay(for: target) }.buttonStyle(.bordered)
-        }
-    }
-
-    private func shiftDate(by days: Int) {
-        date = Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
-    }
-
-    private var hasContent: Bool { completed.nilIfBlank != nil || plans.nilIfBlank != nil || blockers.nilIfBlank != nil || notes.nilIfBlank != nil }
-    private func loadStatus(for selectedDate: Date) {
-        if let existing = project.statuses.first(where: { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }) {
-            editingID = existing.id; state = existing.state; completed = existing.completed; plans = existing.plans
-            blockers = existing.blockers; notes = existing.notes; createdAt = existing.createdAt; fileURL = existing.fileURL
-        } else {
-            editingID = UUID(); state = project.state; completed = ""; plans = ""; blockers = ""
-            notes = store.statusTemplate; createdAt = .now; fileURL = nil
-        }
-    }
-    private func save(advance: Bool) {
-        saving = true
-        let value = DailyStatus(id: editingID, projectID: project.id, projectTitle: project.title, date: date, state: state,
-                                completed: completed, plans: plans, blockers: blockers, notes: notes,
-                                createdAt: createdAt, updatedAt: .now, fileURL: fileURL)
-        Task { await onSave(value, advance); dismiss() }
     }
 }
 
-private struct StatusField: View {
-    let title: String, hint: String
-    @Binding var text: String
-    var tint: Color? = nil
+private struct TodayTaskRow: View {
+    @Environment(AppStore.self) private var store
+    let context: TaskContext
+    @State private var editor: TaskEditorContext?
+
     var body: some View {
-        LabeledContent(title) {
-            TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(8)
-                .frame(minHeight: 70).background((tint ?? .secondary).opacity(tint == nil ? 0.08 : 0.06), in: RoundedRectangle(cornerRadius: 9))
-                .overlay { RoundedRectangle(cornerRadius: 9).stroke((tint ?? .clear).opacity(text.isEmpty ? 0.15 : 0.35), lineWidth: 1) }
-                .overlay(alignment: .topLeading) { if text.isEmpty { Text(hint).foregroundStyle(.tertiary).padding(13).allowsHitTesting(false) } }
+        HStack(alignment: .center, spacing: 10) {
+            Button {
+                Task { await store.toggleTask(context.task, in: context.project) }
+            } label: {
+                Image(systemName: context.task.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(context.task.isDone ? PulseStyle.mint : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 2) {
+                InlineEditableText(font: .body,
+                                   lineLimit: nil,
+                                   tooltip: "Клик — переименовать задачу",
+                                   placeholder: "Задача",
+                                   text: context.task.title) { newTitle in
+                    Task { await store.renameTask(context.task, to: newTitle, in: context.project) }
+                }
+                Button {
+                    store.openProject(context.project.id)
+                } label: {
+                    Label(context.project.pathLabel.isEmpty ? context.project.title : context.project.pathLabel,
+                          systemImage: "square.stack.3d.up")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(PulseStyle.blue)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .pointingHandOnHover()
+            }
+
+            Spacer(minLength: 8)
+
+            TaskDueBadge(task: context.task)
+
+            Button {
+                editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
+            } label: {
+                Image(systemName: "pencil.circle")
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Редактировать задачу")
         }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Отметить выполненной", systemImage: "checkmark.circle.fill") {
+                Task { await store.toggleTask(context.task, in: context.project) }
+            }
+            Button("Редактировать…", systemImage: "pencil") {
+                editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
+            }
+            Divider()
+            Button("Удалить", systemImage: "trash", role: .destructive) {
+                Task { await store.deleteTask(context.task, in: context.project) }
+            }
+        }
+        .sheet(item: $editor) { context in TaskEditorView(context: context) }
     }
 }

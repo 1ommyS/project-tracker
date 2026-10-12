@@ -29,9 +29,6 @@ nonisolated enum MarkdownCodec {
 
         ## Задачи
         \(tasks)
-
-        ## Заметки
-        \(project.notes)
         """
     }
 
@@ -56,53 +53,9 @@ nonisolated enum MarkdownCodec {
                        epic: frontmatter["epic"]?.unquoted ?? "",
                        parentProject: frontmatter["parent_project"]?.unquoted ?? "",
                        summary: section("Описание", in: text), tags: tags,
-                       state: state, tasks: tasks, notes: section("Заметки", in: text),
+                       state: state, tasks: tasks,
                        createdAt: created, updatedAt: updated, isArchived: archived,
-                       statuses: [], folderURL: folderURL)
-    }
-
-    static func encode(status: DailyStatus) -> String {
-        """
-        ---
-        type: daily-status
-        id: \(status.id.uuidString)
-        project: \(status.projectID.uuidString)
-        project_title: \(quote(status.projectTitle))
-        date: \(iso.string(from: status.date))
-        state: \(status.state.rawValue)
-        created: \(iso.string(from: status.createdAt))
-        updated: \(iso.string(from: status.updatedAt))
-        ---
-        # Статус за \(status.date.formatted(date: .long, time: .omitted))
-
-        Проект: [[Project]]
-
-        ## Выполнено
-        \(status.completed)
-
-        ## Планы
-        \(status.plans)
-
-        ## Блокеры
-        \(status.blockers)
-
-        ## Заметки
-        \(status.notes)
-        """
-    }
-
-    static func decodeStatus(_ text: String, fileURL: URL) throws -> DailyStatus {
-        let fm = parseFrontmatter(text)
-        guard let id = UUID(uuidString: fm["id"] ?? ""),
-              let projectID = UUID(uuidString: fm["project"] ?? "") else { throw CodecError.invalidStatus }
-        let created = iso.date(from: fm["created"] ?? "") ?? .now
-        return DailyStatus(id: id, projectID: projectID, projectTitle: fm["project_title"]?.unquoted ?? "Проект",
-                           date: iso.date(from: fm["date"] ?? "") ?? created,
-                           state: ProjectState(rawValue: fm["state"] ?? "active") ?? .active,
-                           completed: section("Выполнено", in: text), plans: section("Планы", in: text),
-                           blockers: section("Блокеры", in: text), notes: section("Заметки", in: text),
-                           createdAt: created, updatedAt: iso.date(from: fm["updated"] ?? "") ?? created,
-                           fileURL: fileURL)
+                       folderURL: folderURL)
     }
 
     static func parseFrontmatter(_ text: String) -> [String: String] {
@@ -155,7 +108,7 @@ nonisolated enum MarkdownCodec {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
-    enum CodecError: Error { case invalidProject, invalidStatus }
+    enum CodecError: Error { case invalidProject }
 }
 
 private extension String {

@@ -13,38 +13,57 @@ actor MarkdownRepository {
         try fm.createDirectory(at: projectsURL, withIntermediateDirectories: true)
         let readme = rootURL.appendingPathComponent("README.md")
         if !fm.fileExists(atPath: readme.path) {
-            try "# Project Tracking\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
+            try "# Trace\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
                 .write(to: readme, atomically: true, encoding: .utf8)
         }
     }
 
     func loadProjects() throws -> [Project] {
         try prepare()
-        let folders = try fm.contentsOfDirectory(at: projectsURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
-        return folders.compactMap { folder in
+        // Структура: Projects/<YYQN>/<slug>, завершённые — Projects/<YYQN>/Completed Projects/<slug>.
+        // Плюс поддержка плоской старой структуры Projects/<slug>.
+        return try scanProjects(in: projectsURL, depth: 0).sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func scanProjects(in directory: URL, depth: Int) throws -> [Project] {
+        let folders = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        var result: [Project] = []
+        for folder in folders {
+            guard (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
             let projectFile = folder.appendingPathComponent("Project.md")
-            guard let text = try? String(contentsOf: projectFile, encoding: .utf8),
-                  var project = try? MarkdownCodec.decodeProject(text, folderURL: folder) else { return nil }
-            let statusFolder = folder.appendingPathComponent("Statuses", isDirectory: true)
-            let statusFiles = (try? fm.contentsOfDirectory(at: statusFolder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
-            project.statuses = statusFiles.filter { $0.pathExtension.lowercased() == "md" }.compactMap { url in
-                guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-                return try? MarkdownCodec.decodeStatus(source, fileURL: url)
-            }.sorted { $0.date > $1.date }
-            return project
-        }.sorted { $0.updatedAt > $1.updatedAt }
+            if fm.fileExists(atPath: projectFile.path),
+               let text = try? String(contentsOf: projectFile, encoding: .utf8),
+               let project = try? MarkdownCodec.decodeProject(text, folderURL: folder) {
+                result.append(project)
+            } else if depth < 2 {
+                result.append(contentsOf: try scanProjects(in: folder, depth: depth + 1))
+            }
+        }
+        return result
     }
 
     func saveProject(_ project: Project) throws -> Project {
-        let folder: URL
+        let parent = containerFolder(for: project)
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+
+        var folder: URL
         if let existing = project.folderURL {
-            folder = existing
+            // Slug не меняем при переименовании — только переносим между папками,
+            // когда проект сменил состояние или квартальную принадлежность.
+            folder = parent.appendingPathComponent(existing.lastPathComponent, isDirectory: true)
+            if existing != folder {
+                let target = fm.fileExists(atPath: folder.path)
+                    ? uniqueFolder(named: existing.lastPathComponent, in: parent)
+                    : folder
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.moveItem(at: existing, to: target)
+                folder = target
+            }
         } else {
-            let base = project.title.fileSlug(fallback: project.id.uuidString.lowercased())
-            folder = uniqueFolder(named: base)
+            folder = uniqueFolder(named: project.title.fileSlug(fallback: project.id.uuidString.lowercased()), in: parent)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        try fm.createDirectory(at: folder.appendingPathComponent("Statuses"), withIntermediateDirectories: true)
+
         let file = folder.appendingPathComponent("Project.md")
         try Data(MarkdownCodec.encode(project: project).utf8).write(to: file, options: .atomic)
         var result = project
@@ -52,16 +71,11 @@ actor MarkdownRepository {
         return result
     }
 
-    func saveStatus(_ status: DailyStatus, for project: Project) throws -> DailyStatus {
-        guard let folder = project.folderURL else { throw RepositoryError.missingProjectFolder }
-        let statuses = folder.appendingPathComponent("Statuses", isDirectory: true)
-        try fm.createDirectory(at: statuses, withIntermediateDirectories: true)
-        let date = Self.dayFormatter.string(from: status.date)
-        let url = status.fileURL ?? statuses.appendingPathComponent("\(date)-\(status.id.uuidString.prefix(8)).md")
-        try Data(MarkdownCodec.encode(status: status).utf8).write(to: url, options: .atomic)
-        var result = status
-        result.fileURL = url
-        return result
+    private func containerFolder(for project: Project) -> URL {
+        let quarterRoot = projectsURL.appendingPathComponent(project.quarter, isDirectory: true)
+        return project.isCompleted
+            ? quarterRoot.appendingPathComponent("Completed Projects", isDirectory: true)
+            : quarterRoot
     }
 
     func deleteProject(_ project: Project) throws {
@@ -77,22 +91,15 @@ actor MarkdownRepository {
 
     private var projectsURL: URL { rootURL.appendingPathComponent("Projects", isDirectory: true) }
 
-    private func uniqueFolder(named name: String) -> URL {
-        var candidate = projectsURL.appendingPathComponent(name, isDirectory: true)
+    private func uniqueFolder(named name: String, in parent: URL) -> URL {
+        var candidate = parent.appendingPathComponent(name, isDirectory: true)
         var suffix = 2
         while fm.fileExists(atPath: candidate.path) {
-            candidate = projectsURL.appendingPathComponent("\(name)-\(suffix)", isDirectory: true)
+            candidate = parent.appendingPathComponent("\(name)-\(suffix)", isDirectory: true)
             suffix += 1
         }
         return candidate
     }
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 
     enum RepositoryError: Error { case missingProjectFolder }
 }

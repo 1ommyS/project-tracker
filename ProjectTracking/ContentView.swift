@@ -5,58 +5,73 @@ struct ContentView: View {
     @State private var showingNewProject = false
     @State private var showingRecentProjects = false
     @State private var showingShortcutHelp = false
-    @State private var statusProject: Project?
+    @State private var taskEditor: TaskEditorContext?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PulseSidebar()
         } detail: {
-            ZStack {
-                PageBackdrop()
-                Group {
-                    if store.isLoading { ProgressView("Читаю Markdown-хранилище…") }
-                    else { destinationView }
+            Group {
+                if store.isLoading {
+                    ProgressView("Читаю Markdown-хранилище…")
+                } else {
+                    destinationView
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.easeInOut(duration: 0.18), value: store.destination)
+            .overlay(alignment: .topLeading) {
+                if columnVisibility == .detailOnly {
+                    MiniNavMap { columnVisibility = .all }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.25), value: columnVisibility)
         }
         .frame(minWidth: 680, minHeight: 520)
         .toolbar {
             ToolbarItemGroup {
-                Button { store.openSearch() } label: { Label("Поиск", systemImage: "magnifyingglass") }
+                Button { store.goBack() } label: { Label("Назад", systemImage: "chevron.backward") }
+                    .disabled(!store.canGoBack)
+                    .help("Назад (⌘[)")
+                Button { store.goForward() } label: { Label("Вперёд", systemImage: "chevron.forward") }
+                    .disabled(!store.canGoForward)
+                    .help("Вперёд (⌘])")
+                Divider()
+                Button { taskEditorForQuickTask() } label: { Label("Новая задача", systemImage: "plus.circle") }
+                    .keyboardShortcut("t", modifiers: .command)
                 Button { showingNewProject = true } label: { Label("Новый проект", systemImage: "plus") }
                     .keyboardShortcut("n", modifiers: .command)
+                Button { store.openRecentProjects() } label: { Label("Недавние", systemImage: "clock") }
                 Button { showingShortcutHelp = true } label: { Label("Горячие клавиши", systemImage: "questionmark.circle") }
             }
         }
         .sheet(isPresented: $showingNewProject) { NewProjectView() }
         .sheet(isPresented: $showingRecentProjects) { RecentProjectsView() }
         .sheet(isPresented: $showingShortcutHelp) { ShortcutHelpView() }
-        .sheet(item: $statusProject) { project in
-            StatusEditorView(project: project) { status, advance in
-                await store.saveStatus(status, projectID: project.id)
-                let next = advance ? store.activeProjects.first(where: { !$0.isUpdatedToday() && $0.id != project.id }) : nil
-                statusProject = nil
-                if let next { Task { @MainActor in try? await Task.sleep(for: .milliseconds(180)); statusProject = next } }
-            }
-        }
-        .alert("Project Tracking", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
+        .sheet(item: $taskEditor) { context in TaskEditorView(context: context) }
+        .alert("Trace", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
         .onChange(of: store.recentProjectsRequest) { _, _ in showingRecentProjects = true }
         .onChange(of: store.shortcutHelpRequest) { _, _ in showingShortcutHelp = true }
-        .onChange(of: store.statusEditorRequest) { _, _ in
-            statusProject = store.selectedProject.flatMap { $0.isArchived ? nil : $0 } ?? store.activeProjects.first
+        .onChange(of: store.quickTaskRequest) { _, _ in taskEditorForQuickTask() }
+    }
+
+    private func taskEditorForQuickTask() {
+        guard let project = store.selectedProject.flatMap({ $0.isArchived ? nil : $0 }) ?? store.activeProjects.first else {
+            store.errorMessage = "Сначала создайте проект, чтобы добавить задачу."
+            return
         }
+        taskEditor = TaskEditorContext(projectID: project.id, taskID: nil)
     }
 
     @ViewBuilder private var destinationView: some View {
         switch store.destination {
-        case .today:
-            TodayView(onUpdate: { statusProject = $0 }, onUpdateAll: { statusProject = store.activeProjects.first(where: { !$0.isUpdatedToday() }) })
-        case .projects: ProjectsView(onUpdate: { statusProject = $0 })
-        case .activity: ActivityView()
+        case .today: TodayView()
+        case .projects: ProjectsView()
         case .search: SearchView()
         case .archive: ArchiveView()
         case .settings: SettingsView()
@@ -64,290 +79,199 @@ struct ContentView: View {
     }
 }
 
-private struct RecentProjectsView: View {
+// MARK: - Мини-панель навигации (когда сайдбар свёрнут)
+
+private struct MiniNavMap: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-
-    private var recentProjects: [Project] {
-        Array(store.projects.sorted { $0.updatedAt > $1.updatedAt }.prefix(12))
-    }
+    let onShowSidebar: () -> Void
+    private let destinations: [SidebarDestination] = [.today, .projects, .search, .archive]
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13).fill(PulseStyle.indigo.opacity(0.14)).frame(width: 46, height: 46)
-                    Image(systemName: "clock.arrow.circlepath").font(.title2).foregroundStyle(PulseStyle.indigo)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    SectionEyebrow(text: "⌘E · Быстрый переход")
-                    Text("Недавние проекты").font(.title2.bold())
-                }
-                Spacer()
-                Button("Закрыть") { dismiss() }.keyboardShortcut(.cancelAction)
+        VStack(spacing: 4) {
+            Button(action: onShowSidebar) {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 30, height: 30)
+                    .foregroundStyle(.primary)
+                    .contentShape(Rectangle())
             }
-            .padding(20)
+            .buttonStyle(.plain)
+            .help("Показать боковую панель")
 
-            Divider()
+            Divider().frame(width: 18)
 
-            if recentProjects.isEmpty {
-                EmptyState(symbol: "clock", title: "Недавних проектов нет", message: "Созданные проекты появятся здесь в порядке последних изменений.")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(recentProjects) { project in
-                            Button {
-                                store.selectedProjectID = project.id
-                                store.destination = .projects
-                                dismiss()
-                            } label: {
-                                RecentProjectRow(project: project)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(16)
-                }
-                .softScrollFade()
+            ForEach(destinations) { destination in
+                destinationButton(destination)
             }
         }
-        .frame(minWidth: 440, idealWidth: 650, maxWidth: 760, minHeight: 360, idealHeight: 520, maxHeight: 720)
-    }
-}
-
-private struct RecentProjectRow: View {
-    let project: Project
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 13) {
-                projectIcon
-                projectCopy
-                Spacer(minLength: 10)
-                StateBadge(state: project.state)
-                updatedLabel
-                chevron
-            }
-            HStack(alignment: .top, spacing: 12) {
-                projectIcon
-                VStack(alignment: .leading, spacing: 8) {
-                    projectCopy
-                    HStack { StateBadge(state: project.state); Spacer(); updatedLabel }
-                }
-                chevron.padding(.top, 7)
-            }
-        }
-        .padding(12).contentShape(Rectangle()).pulsePanel(radius: 14)
+        .padding(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.leading, 12)
+        .padding(.top, 10)
     }
 
-    private var projectIcon: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 11).fill(PulseStyle.blue.opacity(0.12)).frame(width: 40, height: 40)
-            Image(systemName: project.state.symbol).foregroundStyle(PulseStyle.blue)
-        }
-    }
-
-    private var projectCopy: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(project.title).font(.headline).lineLimit(2)
-            FadeOverflowRow { Text(project.pathLabel).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-
-    private var updatedLabel: some View {
-        Text(project.updatedAt.formatted(.relative(presentation: .named)))
-            .font(.caption).foregroundStyle(.tertiary).fixedSize()
-    }
-
-    private var chevron: some View {
-        Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
-    }
-}
-
-private struct ShortcutHelpView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    private let shortcuts: [(keys: [String], title: String, detail: String)] = [
-        (["⌘", "E"], "Недавние проекты", "Быстро открыть недавно изменённый проект, как Recent Files в IDEA."),
-        (["⌘", "F"], "Найти", "Открыть общий поиск и сразу перейти к вводу запроса."),
-        (["⌘", "N"], "Новый проект", "Создать новую часть проекта в выбранной иерархии."),
-        (["⌘", "T"], "Новая задача", "Открыть текущий проект и поставить курсор в поле быстрой задачи."),
-        (["⌘", "⇧", "↩"], "Обновить статус", "Открыть статус на сегодня для выбранного или первого активного проекта."),
-        (["⌘", "1…4"], "Навигация", "Сегодня, Проекты, Активность и Архив — без мыши."),
-        (["⌘", ","], "Настройки", "Открыть системное окно настроек Project Tracking."),
-        (["⌘", "K"], "Поиск", "Дополнительное сочетание для быстрого поиска.")
-    ]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 13) {
-                BrandIcon(size: 48)
-                VStack(alignment: .leading, spacing: 2) {
-                    SectionEyebrow(text: "Project Tracking")
-                    Text("Горячие клавиши").font(.title2.bold())
-                }
-                Spacer()
-                Button("Готово") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-            .padding(20)
-
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 10) {
-                    ForEach(Array(shortcuts.enumerated()), id: \.offset) { _, shortcut in
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 16) {
-                                shortcutKeys(shortcut.keys).frame(width: 118, alignment: .leading)
-                                shortcutCopy(shortcut)
-                                Spacer()
-                            }
-                            VStack(alignment: .leading, spacing: 9) {
-                                shortcutKeys(shortcut.keys)
-                                shortcutCopy(shortcut)
-                            }
-                        }
-                        .padding(14).pulsePanel(radius: 14)
+    private func destinationButton(_ destination: SidebarDestination) -> some View {
+        let isSelected = store.destination == destination
+        return Button {
+            store.open(destination)
+        } label: {
+            Image(systemName: destination.symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 30, height: 30)
+                .foregroundStyle(isSelected ? Color.primary : .secondary)
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
                     }
                 }
-                .padding(18)
-            }
-            .softScrollFade()
-
-            Text("Подсказка: сочетания работают из любого основного экрана Project Tracking.")
-                .font(.caption).foregroundStyle(.secondary).padding(.bottom, 18)
+                .overlay(alignment: .topTrailing) {
+                    if destination == .today, store.urgentTaskCount > 0 {
+                        Circle().fill(.red).frame(width: 6, height: 6).offset(x: 2, y: -2)
+                    }
+                }
+                .contentShape(Rectangle())
         }
-        .frame(minWidth: 440, idealWidth: 630, maxWidth: 760, minHeight: 460, idealHeight: 700, maxHeight: 820)
-    }
-
-    private func shortcutKeys(_ keys: [String]) -> some View {
-        HStack(spacing: 5) {
-            ForEach(keys, id: \.self) { key in
-                Text(key).font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .frame(minWidth: 30, minHeight: 28)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(.separator.opacity(0.5)))
-            }
-        }
-    }
-
-    private func shortcutCopy(_ shortcut: (keys: [String], title: String, detail: String)) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(shortcut.title).font(.headline)
-            Text(shortcut.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
+        .buttonStyle(.plain)
+        .help(destination.title)
     }
 }
+
+// MARK: - Боковая панель (нативный список)
 
 private struct PulseSidebar: View {
     @Environment(AppStore.self) private var store
-    private let primary: [SidebarDestination] = [.today, .projects, .activity, .search]
+    @State private var collapsedQuarters: Set<String> = []
+    private let primary: [SidebarDestination] = [.today, .projects, .search]
     private let library: [SidebarDestination] = [.archive, .settings]
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                BrandIcon(size: 46)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Project Tracking").font(.system(size: 19, weight: .bold, design: .rounded)).minimumScaleFactor(0.72).lineLimit(1)
-                    Text("Project rhythm").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-                }
-            }.padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 22)
-
-            SectionEyebrow(text: "Рабочее пространство").padding(.horizontal, 18).padding(.bottom, 7)
-            VStack(spacing: 4) { ForEach(primary) { destination in sidebarButton(destination) } }
-
-            SectionEyebrow(text: "Библиотека").padding(.horizontal, 18).padding(.top, 22).padding(.bottom, 7)
-            VStack(spacing: 4) { ForEach(library) { destination in sidebarButton(destination) } }
-
-            Spacer()
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9).fill(PulseStyle.mint.opacity(0.14)).frame(width: 32, height: 32)
-                    Image(systemName: "lock.shield.fill").foregroundStyle(PulseStyle.mint)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Локально и приватно").font(.caption.weight(.semibold))
-                    Text(store.vaultURL.lastPathComponent).lineLimit(1).font(.caption2).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
+    private var selection: Binding<SidebarDestination?> {
+        Binding(
+            get: { store.destination },
+            set: { destination in
+                if let destination { store.open(destination) }
             }
-            .padding(12).pulsePanel(radius: 14).padding(10)
-        }
-        .frame(minWidth: 196, idealWidth: 218, maxWidth: 270)
-        .background(.ultraThinMaterial)
+        )
     }
 
-    private func sidebarButton(_ destination: SidebarDestination) -> some View {
-        Button {
-            store.destination = destination
-        } label: {
-            HStack(spacing: 11) {
-                Image(systemName: destination.symbol).font(.system(size: 14, weight: .semibold)).frame(width: 23)
-                    .foregroundStyle(store.destination == destination ? .white : iconColor(destination))
-                Text(destination.title).font(.system(size: 13.5, weight: store.destination == destination ? .semibold : .medium))
-                Spacer()
-                if let badge = badge(for: destination), badge > 0 {
-                    Text("\(badge)").font(.caption2.bold()).padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(store.destination == destination ? .white.opacity(0.2) : .secondary.opacity(0.12), in: Capsule())
+    var body: some View {
+        List(selection: selection) {
+            Section("Рабочее пространство") {
+                ForEach(primary) { destination in
+                    sidebarRow(destination).tag(destination)
                 }
             }
-            .foregroundStyle(store.destination == destination ? .white : .primary)
-            .padding(.horizontal, 12).frame(height: 39)
-            .background {
-                if store.destination == destination {
-                    LinearGradient(colors: [PulseStyle.blue, PulseStyle.indigo], startPoint: .leading, endPoint: .trailing)
-                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        .shadow(color: PulseStyle.blue.opacity(0.25), radius: 9, y: 4)
+
+            if !store.activeProjects.isEmpty {
+                Section("Проекты") {
+                    ForEach(store.activeProjects.groupedByQuarter(), id: \.quarter) { group in
+                        DisclosureGroup(isExpanded: quarterBinding(group.quarter)) {
+                            ForEach(group.projects) { project in
+                                sidebarProjectRow(project)
+                            }
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "folder.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.tint)
+                                Text(group.quarter)
+                                    .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
+                                Spacer(minLength: 0)
+                                Text("\(group.projects.count)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                    Button {
+                        store.openProjectsList()
+                    } label: {
+                        Label("Все проекты", systemImage: "rectangle.stack")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .contentShape(Rectangle())
+
+            Section("Библиотека") {
+                ForEach(library) { destination in
+                    sidebarRow(destination).tag(destination)
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.14), value: store.destination)
-        .padding(.horizontal, 9)
+        .listStyle(.sidebar)
+    }
+
+    private func sidebarRow(_ destination: SidebarDestination) -> some View {
+        HStack(spacing: 6) {
+            Label(destination.title, systemImage: destination.symbol)
+            Spacer(minLength: 0)
+            if let badge = badge(for: destination), badge > 0 {
+                Text("\(badge)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+            }
+        }
+        .contentShape(Rectangle())
     }
 
     private func badge(for destination: SidebarDestination) -> Int? {
         switch destination {
-        case .today: store.activeProjects.filter { !$0.isUpdatedToday() }.count
+        case .today: store.urgentTaskCount
         case .projects: store.activeProjects.count
         case .archive: store.archivedProjects.count
         default: nil
         }
     }
 
-    private func iconColor(_ destination: SidebarDestination) -> Color {
-        switch destination {
-        case .today: PulseStyle.amber
-        case .projects: PulseStyle.blue
-        case .activity: PulseStyle.indigo
-        case .search: PulseStyle.mint
-        case .archive: .secondary
-        case .settings: .secondary
+    private func sidebarProjectRow(_ project: Project) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: project.state.symbol)
+                .font(.system(size: 11.5, weight: .medium))
+                .frame(width: 18)
+                .foregroundStyle(project.state.color)
+            InlineEditableText(font: .system(size: 13, weight: isProjectSelected(project) ? .medium : .regular),
+                               tooltip: "Клик — переименовать, по строке — открыть",
+                               placeholder: "Проект",
+                               text: project.title) { newTitle in
+                Task { await store.renameProject(project, to: newTitle) }
+            }
+            Spacer(minLength: 0)
+            if !project.openTasks.isEmpty {
+                Text("\(project.openTasks.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .background {
+            if isProjectSelected(project) {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quaternary)
+            }
+        }
+        .onTapGesture { store.openProject(project.id) }
     }
-}
 
-struct StateBadge: View {
-    let state: ProjectState
-    var body: some View {
-        Label(state.title, systemImage: state.symbol)
-            .font(.caption.weight(.semibold)).foregroundStyle(color)
-            .padding(.horizontal, 9).padding(.vertical, 5)
-            .background(color.opacity(0.12), in: Capsule())
+    private func isProjectSelected(_ project: Project) -> Bool {
+        store.destination == .projects && store.projectsPresentation == .editor && store.selectedProjectID == project.id
     }
-    private var color: Color {
-        switch state { case .active: PulseStyle.blue; case .blocked: .red; case .onHold: PulseStyle.amber; case .done: PulseStyle.mint; case .archived: .secondary; case .planned: PulseStyle.indigo }
-    }
-}
 
-struct EmptyState: View {
-    let symbol: String
-    let title: String
-    let message: String
-    var body: some View { ContentUnavailableView(title, systemImage: symbol, description: Text(message)) }
+    private func quarterBinding(_ quarter: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedQuarters.contains(quarter) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedQuarters.remove(quarter)
+                } else {
+                    collapsedQuarters.insert(quarter)
+                }
+            }
+        )
+    }
 }
 
 #Preview { ContentView().environment(AppStore()) }

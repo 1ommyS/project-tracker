@@ -119,9 +119,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/PROJECT Tracking.app"
-          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/PROJECT-Tracking-notarization.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/PROJECT-Tracking-notarization.zip" \
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace.app"
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/Trace-notarization.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Trace-notarization.zip" \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
           xcrun stapler staple "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
@@ -129,7 +129,7 @@ jobs:
       - name: Package DMG and ZIP
         run: |
           chmod +x scripts/package-release.sh
-          scripts/package-release.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/PROJECT Tracking.app" dist
+          scripts/package-release.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace.app" dist
 
       - name: Notarize and staple DMG
         if: steps.credentials.outputs.can_notarize == 'true'
@@ -138,10 +138,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          xcrun notarytool submit dist/PROJECT-Tracking.dmg \
+          xcrun notarytool submit dist/Trace.dmg \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
-          xcrun stapler staple dist/PROJECT-Tracking.dmg
-          xcrun stapler validate dist/PROJECT-Tracking.dmg
+          xcrun stapler staple dist/Trace.dmg
+          xcrun stapler validate dist/Trace.dmg
 
       - name: Publish GitHub Release
         env:
@@ -149,7 +149,7 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
-          gh release create "$RELEASE_TAG" dist/PROJECT-Tracking.zip dist/PROJECT-Tracking.dmg \
+          gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
             --target "$RELEASE_SHA" \
-            --title "PROJECT Tracking $RELEASE_TAG" \
+            --title "Trace $RELEASE_TAG" \
             --generate-notes

@@ -98,12 +98,20 @@ private struct SoftScrollFadeModifier: ViewModifier {
     }
 }
 
+/// Единые метрики вёрстки: экраны и листы — 24pt, карточки — 18pt.
+enum PulseMetrics {
+    static let screen: CGFloat = 24
+    static let card: CGFloat = 18
+    static let contentWidth: CGFloat = 1000
+}
+
 enum PulseStyle {
-    static let blue = Color(red: 0.12, green: 0.42, blue: 0.98)
-    static let indigo = Color(red: 0.26, green: 0.20, blue: 0.82)
-    static let mint = Color(red: 0.16, green: 0.86, blue: 0.72)
-    static let amber = Color(red: 1.0, green: 0.64, blue: 0.18)
-    static let cardRadius: CGFloat = 20
+    // Системная палитра: приложение наследует акценты и appearance macOS.
+    static let blue = Color.blue
+    static let indigo = Color.indigo
+    static let mint = Color.mint
+    static let amber = Color.orange
+    static let cardRadius: CGFloat = 12
 }
 
 enum ThemeController {
@@ -123,41 +131,6 @@ enum ThemeController {
     }
 }
 
-struct PageBackdrop: View {
-    @Environment(\.colorScheme) private var colorScheme
-    var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-            RadialGradient(
-                colors: [PulseStyle.blue.opacity(colorScheme == .dark ? 0.13 : 0.075), .clear],
-                center: .center,
-                startRadius: 0,
-                endRadius: 270
-            )
-            .frame(width: 540, height: 540)
-            .offset(x: 370, y: -300)
-            RadialGradient(
-                colors: [PulseStyle.mint.opacity(colorScheme == .dark ? 0.075 : 0.045), .clear],
-                center: .center,
-                startRadius: 0,
-                endRadius: 230
-            )
-            .frame(width: 460, height: 460)
-            .offset(x: -420, y: 350)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-struct BrandIcon: View {
-    var size: CGFloat = 42
-    var body: some View {
-        Image(nsImage: NSApplication.shared.applicationIconImage)
-            .resizable().interpolation(.high).aspectRatio(contentMode: .fit)
-            .frame(width: size, height: size)
-            .shadow(color: PulseStyle.blue.opacity(0.25), radius: size * 0.2, y: size * 0.08)
-    }
-}
 
 struct SectionEyebrow: View {
     let text: String
@@ -171,10 +144,52 @@ struct SectionEyebrow: View {
 extension View {
     func softScrollFade() -> some View { modifier(SoftScrollFadeModifier()) }
 
+    func screenPadding(_ edges: Edge.Set = .all) -> some View { padding(edges, PulseMetrics.screen) }
+    func cardPadding(_ edges: Edge.Set = .all) -> some View { padding(edges, PulseMetrics.card) }
+
+    /// Ограничивает ширину до контентной колонки — хедер и контент одной ширины.
+    func pageWidth() -> some View { frame(maxWidth: PulseMetrics.contentWidth, alignment: .leading) }
+
+    /// Курсор-рука при наведении — для кликабельных карточек и ссылок-строк.
+    /// На выходе дополнительно ставим стрелку: push/pop может разладиться
+    /// с системным I-beam текстовых полей, и курсор «залипает».
+    func pointingHandOnHover() -> some View { modifier(PointingHandHoverModifier()) }
+
+    /// Возврат стрелки при уходе курсора с поля ввода — системный I-beam
+    /// после выхода из SwiftUI-редакторов иногда остаётся висеть.
+    func arrowCursorOnExit() -> some View { modifier(ArrowCursorOnExitModifier()) }
+
     func pulsePanel(radius: CGFloat = PulseStyle.cardRadius) -> some View {
+        // Группированная карточка в духе системных inset-секций:
+        // без теней и обводок, тихая подложка на фоне окна.
         self
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(.white.opacity(0.12), lineWidth: 0.7) }
-            .shadow(color: .black.opacity(0.055), radius: 18, y: 8)
+            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+private struct PointingHandHoverModifier: ViewModifier {
+    @State private var didPush = false
+
+    func body(content: Content) -> some View {
+        content.onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.push()
+                didPush = true
+            } else {
+                if didPush { NSCursor.pop() }
+                didPush = false
+                NSCursor.arrow.set()
+            }
+        }
+    }
+}
+
+private struct ArrowCursorOnExitModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { hovering in
+            if !hovering {
+                NSCursor.arrow.set()
+            }
+        }
     }
 }

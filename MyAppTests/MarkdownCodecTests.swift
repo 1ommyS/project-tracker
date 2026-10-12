@@ -10,8 +10,8 @@ final class MarkdownCodecTests: XCTestCase {
                               tags: ["учёба", "важно"], state: .active,
                               tasks: [ProjectTask(title: "Собрать требования", isDone: true),
                                       ProjectTask(title: "Написать главу", isDone: false, dueDate: dueDate)],
-                              notes: "Текст с #тегом", createdAt: .now, updatedAt: .now,
-                              isArchived: false, statuses: [], folderURL: nil)
+                              createdAt: .now, updatedAt: .now,
+                              isArchived: false, folderURL: nil)
         let markdown = MarkdownCodec.encode(project: project)
         let decoded = try MarkdownCodec.decodeProject(markdown, folderURL: URL(fileURLWithPath: "/tmp/project"))
 
@@ -25,36 +25,57 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertTrue(decoded.tasks[0].isDone)
         let decodedDueDate = try XCTUnwrap(decoded.tasks[1].dueDate)
         XCTAssertEqual(decodedDueDate.timeIntervalSince1970, dueDate.timeIntervalSince1970, accuracy: 1)
-        XCTAssertEqual(decoded.notes, project.notes)
+        XCTAssertEqual(decoded.summary, project.summary)
         XCTAssertTrue(markdown.contains("📅 2026-10-20 ⏰ 18:30"))
     }
 
-    func testStatusRoundTripPreservesSections() throws {
-        let url = URL(fileURLWithPath: "/tmp/status.md")
-        let status = DailyStatus(id: UUID(), projectID: UUID(), projectTitle: "Проект", date: .now,
-                                 state: .blocked, completed: "Готов макет", plans: "Написать код",
-                                 blockers: "Жду API", notes: "[[Документ]]", createdAt: .now, updatedAt: .now, fileURL: url)
-        let decoded = try MarkdownCodec.decodeStatus(MarkdownCodec.encode(status: status), fileURL: url)
-
-        XCTAssertEqual(decoded.id, status.id)
-        XCTAssertEqual(decoded.state, .blocked)
-        XCTAssertEqual(decoded.completed, "Готов макет")
-        XCTAssertEqual(decoded.blockers, "Жду API")
-    }
-
-    func testRepositoryPersistsProjectAndStatus() async throws {
+    func testRepositoryPersistsProjectAndTasks() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PulseboardTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = MarkdownRepository(rootURL: root)
+        let due = Calendar.current.date(byAdding: .day, value: 2, to: .now) ?? .now
         var project = Project(id: UUID(), title: "Тест", summary: "Локальный проект", tags: [], state: .active,
-                              tasks: [], notes: "", createdAt: .now, updatedAt: .now, isArchived: false, statuses: [], folderURL: nil)
+                              tasks: [ProjectTask(title: "Первая задача", isDone: false, dueDate: due),
+                                      ProjectTask(title: "Готовая задача", isDone: true, dueDate: nil)],
+                              createdAt: .now, updatedAt: .now, isArchived: false, folderURL: nil)
         project = try await repository.saveProject(project)
-        let status = DailyStatus(id: UUID(), projectID: project.id, projectTitle: project.title, date: .now, state: .active,
-                                 completed: "Работает", plans: "Проверить", blockers: "", notes: "", createdAt: .now, updatedAt: .now, fileURL: nil)
-        _ = try await repository.saveStatus(status, for: project)
 
         let loaded = try await repository.loadProjects()
         XCTAssertEqual(loaded.count, 1)
-        XCTAssertEqual(loaded[0].statuses.first?.completed, "Работает")
+        XCTAssertEqual(loaded[0].tasks.count, 2)
+        XCTAssertEqual(loaded[0].openTasks.first?.title, "Первая задача")
+        XCTAssertEqual(loaded[0].doneTasks.first?.title, "Готовая задача")
+    }
+
+    func testDecodeIgnoresLegacySections() throws {
+        let id = UUID()
+        let markdown = """
+        ---
+        type: project
+        id: \(id.uuidString)
+        title: "Старый формат"
+        epic: ""
+        parent_project: ""
+        state: active
+        tags: []
+        created: \(MarkdownCodec.iso.string(from: .now))
+        updated: \(MarkdownCodec.iso.string(from: .now))
+        archived: false
+        ---
+        # Старый формат
+
+        ## Описание
+        Описание проекта
+
+        ## Задачи
+        - [ ] Одна задача
+
+        ## Заметки
+        Эти заметки из старой версии больше не читаются, но файл остаётся валидным.
+        """
+        let decoded = try MarkdownCodec.decodeProject(markdown, folderURL: URL(fileURLWithPath: "/tmp/legacy"))
+        XCTAssertEqual(decoded.id, id)
+        XCTAssertEqual(decoded.tasks.count, 1)
+        XCTAssertEqual(decoded.tasks[0].title, "Одна задача")
     }
 }

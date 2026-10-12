@@ -14,24 +14,26 @@ struct ProjectTrackingApp: App {
                 }
                 .onChange(of: store.theme) { _, theme in ThemeController.apply(theme) }
         }
-        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Недавние проекты…") { store.openRecentProjects() }.keyboardShortcut("e", modifiers: .command)
                 Button("Поиск…") { store.openSearch() }.keyboardShortcut("k", modifiers: .command)
                 Button("Новая задача…") { store.openQuickTask() }.keyboardShortcut("t", modifiers: .command)
-                Button("Обновить статус…") { store.openStatusEditor() }.keyboardShortcut(.return, modifiers: [.command, .shift])
             }
             CommandGroup(after: .pasteboard) {
-                Button("Найти в Project Tracking…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
+                Button("Найти в Trace…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
+            }
+            CommandGroup(after: .toolbar) {
+                Button("Назад") { store.goBack() }.keyboardShortcut("[", modifiers: .command).disabled(!store.canGoBack)
+                Button("Вперёд") { store.goForward() }.keyboardShortcut("]", modifiers: .command).disabled(!store.canGoForward)
             }
             CommandGroup(replacing: .help) {
-                Button("Горячие клавиши Project Tracking") { store.openShortcutHelp() }
+                Button("Горячие клавиши Trace") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)
                 Button("Проекты") { store.open(.projects) }.keyboardShortcut("2", modifiers: .command)
-                Button("Активность") { store.open(.activity) }.keyboardShortcut("3", modifiers: .command)
+                Button("Поиск") { store.open(.search) }.keyboardShortcut("3", modifiers: .command)
                 Button("Архив") { store.open(.archive) }.keyboardShortcut("4", modifiers: .command)
             }
         }

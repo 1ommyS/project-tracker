@@ -39,25 +39,6 @@ struct ProjectTask: Identifiable, Hashable, Sendable {
     var notificationID: String { "pulseboard.task.\(id.uuidString)" }
 }
 
-struct DailyStatus: Identifiable, Hashable, Sendable {
-    var id: UUID
-    var projectID: UUID
-    var projectTitle: String
-    var date: Date
-    var state: ProjectState
-    var completed: String
-    var plans: String
-    var blockers: String
-    var notes: String
-    var createdAt: Date
-    var updatedAt: Date
-    var fileURL: URL?
-
-    var searchableText: String {
-        [projectTitle, state.title, completed, plans, blockers, notes].joined(separator: "\n")
-    }
-}
-
 struct Project: Identifiable, Hashable, Sendable {
     var id: UUID
     var title: String
@@ -67,44 +48,62 @@ struct Project: Identifiable, Hashable, Sendable {
     var tags: [String]
     var state: ProjectState
     var tasks: [ProjectTask]
-    var notes: String
     var createdAt: Date
     var updatedAt: Date
     var isArchived: Bool
-    var statuses: [DailyStatus]
     var folderURL: URL?
-
-    var latestStatus: DailyStatus? { statuses.max(by: { $0.date < $1.date }) }
 
     var breadcrumb: [String] { [epic.nilIfBlank, parentProject.nilIfBlank, title.nilIfBlank].compactMap { $0 } }
     var pathLabel: String { breadcrumb.joined(separator: "  ›  ") }
 
-    func isUpdatedToday(calendar: Calendar = .current) -> Bool {
-        statuses.contains { calendar.isDateInToday($0.date) }
-    }
+    var openTasks: [ProjectTask] { tasks.filter { !$0.isDone } }
+    var doneTasks: [ProjectTask] { tasks.filter(\.isDone) }
+    var taskProgress: Double { tasks.isEmpty ? 0 : Double(doneTasks.count) / Double(tasks.count) }
 
     var searchableText: String {
-        ([title, summary, notes] + tags + tasks.map(\.title) + statuses.map(\.searchableText))
-            .joined(separator: "\n")
+        ([title, summary] + tags + tasks.map(\.title)).joined(separator: "\n")
     }
 }
 
+/// Задача вместе с проектом, которому она принадлежит, — для лент «Сегодня» и поиска.
+struct TaskContext: Identifiable, Hashable {
+    let project: Project
+    let task: ProjectTask
+    var id: UUID { task.id }
+}
+
 struct SearchHit: Identifiable, Hashable {
-    enum Kind: String { case project = "Проект", status = "Статус", note = "Заметка" }
+    enum Kind: String { case project = "Проект", task = "Задача" }
     let id: String
     let projectID: UUID
-    let statusID: UUID?
     let kind: Kind
     let title: String
     let excerpt: String
     let date: Date?
 }
 
-struct ActivityItem: Identifiable, Hashable {
-    let id: UUID
+/// Что открыть в редакторе задачи: новую задачу проекта или существующую.
+struct TaskEditorContext: Identifiable {
     let projectID: UUID
-    let projectTitle: String
-    let status: DailyStatus
+    let taskID: UUID?
+    var id: String { "\(projectID.uuidString)-\(taskID?.uuidString ?? "new")" }
+}
+
+extension Date {
+    /// Метка квартала в формате YYQN: октябрь 2026 → «26Q4».
+    var quarterLabel: String {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: self) % 100
+        let quarter = (calendar.component(.month, from: self) - 1) / 3 + 1
+        return String(format: "%02dQ%d", year, quarter)
+    }
+}
+
+extension Project {
+    /// Квартал создания — основа папки и фильтра.
+    var quarter: String { createdAt.quarterLabel }
+    /// Завершённые проекты живут в подпапке Completed Projects.
+    var isCompleted: Bool { state == .done || state == .archived || isArchived }
 }
 
 extension String {
