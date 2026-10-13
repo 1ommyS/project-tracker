@@ -177,9 +177,8 @@ struct TodayView: View {
                         Divider().gridCellColumns(2 + days.count)
                     }
                 }
-                // Грид — идеальной высоты (строки не тянутся), панель — растягивается:
-                // fixedSize фиксирует содержимое, frame с maxHeight растит подложку.
-                .fixedSize(horizontal: false, vertical: true)
+                // Строки распределяются по всей высоте первого экрана:
+                // таблица заполняет панель целиком, как лист Numbers.
                 .frame(minWidth: 1290, maxHeight: .infinity, alignment: .topLeading)
                 .padding(PulseMetrics.card)
                 .pulsePanel(radius: 12)
