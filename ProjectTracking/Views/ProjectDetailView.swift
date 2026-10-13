@@ -148,19 +148,18 @@ struct ProjectDetailView: View {
                     .frame(width: 132)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 2) {
                 ForEach(quickDays, id: \.self) { day in
-                    let isSelected = calendar.isDate(statusDay, inSameDayAs: day)
-                    Button {
+                    DayChip(title: RuDate.dayMonthShort(day),
+                            isSelected: calendar.isDate(statusDay, inSameDayAs: day),
+                            accent: store.palette.color) {
                         statusDay = day
-                    } label: {
-                        Text(RuDate.dayMonthShort(day))
-                            .font(.caption.weight(isSelected ? .semibold : .regular))
                     }
-                    .buttonStyle(.glass)
-                    .tint(isSelected ? store.palette.color : .secondary)
                 }
             }
+            .padding(4)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.separator.opacity(0.35)))
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Статус на \(RuDate.dayMonthShort(statusDay))\(calendar.isDateInToday(statusDay) ? " (сегодня)" : "")")
@@ -364,5 +363,35 @@ private extension View {
         self
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+}
+
+/// Чип дня внутри стеклянной полосы: выделенный — цветом палитры.
+struct DayChip: View {
+    let title: String
+    let isSelected: Bool
+    let accent: Color
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? accent : .secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.quaternary)
+                    } else if isHovering {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.quinary)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(title)
     }
 }

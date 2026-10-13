@@ -115,39 +115,30 @@ struct MarkdownEditor: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 4) {
-            toolButton("bold") { wrap("**", placeholder: "жирный") }
-            toolButton("italic") { wrap("*", placeholder: "курсив") }
-            toolButton("strikethrough") { wrap("~~", placeholder: "зачёркнутый") }
-            toolButton("chevron.left.forwardslash.chevron.right") { wrap("`", placeholder: "код") }
-            Divider().frame(height: 14)
-            toolButton("textformat.size") { prefixLine("## ") }
-            toolButton("list.bullet") { prefixLine("- ") }
-            toolButton("checklist") { prefixLine("- [ ] ") }
-            toolButton("text.quote") { prefixLine("> ") }
-            Divider().frame(height: 14)
-            toolButton("link") { insertLink() }
-            Spacer()
-            Button {
-                showsPreview.toggle()
-            } label: {
-                Image(systemName: showsPreview ? "pencil.line" : "eye")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(showsPreview ? "К редактору" : "Предпросмотр Markdown")
+        HStack(spacing: 2) {
+            ToolButton("bold", help: "Жирный") { wrap("**", placeholder: "жирный") }
+            ToolButton("italic", help: "Курсив") { wrap("*", placeholder: "курсив") }
+            ToolButton("strikethrough", help: "Зачёркнутый") { wrap("~~", placeholder: "зачёркнутый") }
+            ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { wrap("`", placeholder: "код") }
+            toolDivider
+            ToolButton("textformat.size", help: "Заголовок") { prefixLine("## ") }
+            ToolButton("list.bullet", help: "Список") { prefixLine("- ") }
+            ToolButton("checklist", help: "Чекбокс") { prefixLine("- [ ] ") }
+            ToolButton("text.quote", help: "Цитата") { prefixLine("> ") }
+            toolDivider
+            ToolButton("link", help: "Ссылка") { insertLink() }
+            Spacer(minLength: 6)
+            ToolButton(showsPreview ? "pencil.line" : "eye",
+                       help: showsPreview ? "К редактору" : "Предпросмотр Markdown",
+                       tint: .secondary) { showsPreview.toggle() }
         }
+        .padding(4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.separator.opacity(0.35)))
     }
 
-    private func toolButton(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 26, height: 24)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.glass)
-        .help(symbol)
+    private var toolDivider: some View {
+        Rectangle().fill(.separator.opacity(0.5)).frame(width: 1, height: 14).padding(.horizontal, 3)
     }
 
     // MARK: Операции с текстом
@@ -197,6 +188,41 @@ struct MarkdownEditor: View {
             guard !Task.isCancelled else { return }
             onCommit?()
         }
+    }
+}
+
+/// Иконка внутри стеклянной полосы: без собственной кнопочной
+/// графике, hover — тихий кружок, как в системных тулбарах.
+struct ToolButton: View {
+    let symbol: String
+    var help: String = ""
+    var tint: Color = .primary
+    var action: () -> Void
+    @State private var isHovering = false
+
+    init(_ symbol: String, help: String = "", tint: Color = .primary, action: @escaping () -> Void) {
+        self.symbol = symbol
+        self.help = help
+        self.tint = tint
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12.5, weight: .medium))
+                .frame(width: 28, height: 24)
+                .foregroundStyle(tint)
+                .background {
+                    if isHovering {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.quinary)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help.isEmpty ? symbol : help)
     }
 }
 

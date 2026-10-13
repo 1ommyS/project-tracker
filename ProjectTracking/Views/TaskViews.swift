@@ -215,11 +215,20 @@ struct TaskEditorView: View {
                 Section("Срок и напоминание") {
                     Toggle("Напомнить в срок", isOn: $hasDueDate)
                     if hasDueDate {
-                        HStack(spacing: 8) {
-                            presetButton("Сегодня", daysAhead: 0)
-                            presetButton("Завтра", daysAhead: 1)
-                            presetButton("Через неделю", daysAhead: 7)
+                        HStack(spacing: 2) {
+                            DayChip(title: "Сегодня", isSelected: isSameDay(dueDate, daysAhead: 0), accent: store.palette.color) {
+                                applyPreset(daysAhead: 0)
+                            }
+                            DayChip(title: "Завтра", isSelected: isSameDay(dueDate, daysAhead: 1), accent: store.palette.color) {
+                                applyPreset(daysAhead: 1)
+                            }
+                            DayChip(title: "Через неделю", isSelected: isSameDay(dueDate, daysAhead: 7), accent: store.palette.color) {
+                                applyPreset(daysAhead: 7)
+                            }
                         }
+                        .padding(4)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.separator.opacity(0.35)))
                         DatePicker("Дата и время", selection: $dueDate)
                     }
                     if store.notifications.authorization != .allowed {
@@ -280,17 +289,19 @@ struct TaskEditorView: View {
         dueDate = task.dueDate ?? TaskEditorView.defaultDue
     }
 
-    private func presetButton(_ title: String, daysAhead: Int) -> some View {
-        Button(title) {
-            let calendar = Calendar.current
-            let target = calendar.date(byAdding: .day, value: daysAhead, to: .now) ?? .now
-            var components = calendar.dateComponents([.year, .month, .day], from: target)
-            let time = calendar.dateComponents([.hour, .minute], from: dueDate)
-            components.hour = time.hour ?? 9
-            components.minute = time.minute ?? 0
-            dueDate = calendar.date(from: components) ?? dueDate
-        }
-        .buttonStyle(.glass)
+    private func isSameDay(_ date: Date, daysAhead: Int) -> Bool {
+        guard let target = Calendar.current.date(byAdding: .day, value: daysAhead, to: .now) else { return false }
+        return Calendar.current.isDate(date, inSameDayAs: target)
+    }
+
+    private func applyPreset(daysAhead: Int) {
+        let calendar = Calendar.current
+        let target = calendar.date(byAdding: .day, value: daysAhead, to: .now) ?? .now
+        var components = calendar.dateComponents([.year, .month, .day], from: target)
+        let time = calendar.dateComponents([.hour, .minute], from: dueDate)
+        components.hour = time.hour ?? 9
+        components.minute = time.minute ?? 0
+        dueDate = calendar.date(from: components) ?? dueDate
     }
 
     private func save() {
