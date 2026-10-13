@@ -19,6 +19,8 @@ struct ProjectDetailView: View {
     @State private var showDone = false
     @State private var deleteConfirmation = false
     @State private var statusDay = Date.now
+    @State private var statusDraft = ""
+    @State private var blockersDraft = ""
     @State private var artifactTitle = ""
     @State private var artifactURL = ""
 
@@ -45,6 +47,7 @@ struct ProjectDetailView: View {
             } message: { Text("Папка проекта будет перемещена в системную Корзину и сможет быть восстановлена.") }
             .onAppear { hydrate(from: project) }
             .onDisappear { saveNow() }
+            .task(id: statusDay) { syncStatusDrafts(project) }
             .onChange(of: title) { _, _ in markDirty() }
             .onChange(of: epic) { _, _ in markDirty() }
             .onChange(of: parentProject) { _, _ in markDirty() }
@@ -163,22 +166,19 @@ struct ProjectDetailView: View {
                 Text("Статус на \(RuDate.dayMonthShort(statusDay))\(calendar.isDateInToday(statusDay) ? " (сегодня)" : "")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                InlineEditableText(font: .body,
-                                   lineLimit: nil,
-                                   tooltip: "Клик — править статус на этот день",
-                                   placeholder: "Что было сделано, что дальше…",
-                                   text: entry?.status ?? "") { newText in
-                    Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: statusDay) }
-                }
+                MarkdownEditor(text: $statusDraft,
+                               placeholder: "Что было сделано, что дальше… **Markdown** поддерживается",
+                               minHeight: 96,
+                               onCommit: {
+                                   Task { await store.setDailyStatus(text: statusDraft, blockers: nil, for: project, on: statusDay) }
+                               })
                 Text("Блокеры").font(.caption).foregroundStyle(.secondary)
-                InlineEditableText(font: .body,
-                                   color: (entry?.blockers ?? "").isEmpty ? .secondary : .red,
-                                   lineLimit: nil,
-                                   tooltip: "Клик — правка блокеров на этот день",
-                                   placeholder: "—",
-                                   text: entry?.blockers ?? "") { newBlockers in
-                    Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: statusDay) }
-                }
+                MarkdownEditor(text: $blockersDraft,
+                               placeholder: "Что мешает двигаться дальше",
+                               minHeight: 56,
+                               onCommit: {
+                                   Task { await store.setDailyStatus(text: nil, blockers: blockersDraft, for: project, on: statusDay) }
+                               })
                 if let entry {
                     ForEach(entry.tasks) { task in
                         Button {
@@ -312,6 +312,12 @@ struct ProjectDetailView: View {
     }
 
     // MARK: - Сохранение
+
+    private func syncStatusDrafts(_ project: Project) {
+        let entry = project.dailyStatus(on: statusDay)
+        statusDraft = entry?.status ?? ""
+        blockersDraft = entry?.blockers ?? ""
+    }
 
     private func hydrate(from project: Project) {
         guard !hydrated else { return }
