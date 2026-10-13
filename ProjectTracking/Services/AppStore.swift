@@ -243,6 +243,12 @@ final class AppStore {
         // а если разрешения нет — уводим в Системные настройки уведомлений.
         await notifications.authorizeAndSync(projects: projects)
         if notifications.authorization != .allowed {
+            // Центр уведомлений на старте процесса может отдавать
+            // устаревший notDetermined — переспрашиваем с паузой.
+            try? await Task.sleep(for: .milliseconds(600))
+            await notifications.refreshAuthorization()
+        }
+        if notifications.authorization != .allowed {
             notifications.openSystemSettings()
         }
     }

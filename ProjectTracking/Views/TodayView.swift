@@ -56,13 +56,11 @@ struct TodayView: View {
         .navigationTitle("Сегодня")
     }
 
-    /// Полный вид: приветствие, метрики и все секции задач.
+    /// Полный вид: матрица статусов занимает первый экран,
+    /// метрики и секции задач — ниже при прокрутке.
     @ViewBuilder
     private var detailedContent: some View {
-        TodayHero(total: totalCount, done: doneCount,
-                  dueToday: dueToday.count, overdue: overdue.count,
-                  accent: store.palette.color,
-                  onOpenProjects: { store.open(.projects) })
+        statusMatrix
 
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
             MetricCard(value: "\(openTasks.count)", label: "открытых задач", symbol: "circle.stack", tint: .blue)
@@ -70,7 +68,11 @@ struct TodayView: View {
             MetricCard(value: "\(overdue.count)", label: "просрочено", symbol: "exclamationmark.triangle.fill", tint: overdue.isEmpty ? .green : .red)
         }
 
-        statusMatrix
+        TodayHero(total: totalCount, done: doneCount,
+                  dueToday: dueToday.count, overdue: overdue.count,
+                  accent: store.palette.color,
+                  onOpenProjects: { store.open(.projects) })
+
         sectionsContent
     }
 
