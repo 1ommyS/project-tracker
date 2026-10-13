@@ -3,12 +3,11 @@ import SwiftUI
 
 // MARK: - NSTextView с выбором диапазона
 
-/// Многострочное поле для Markdown-редактора: сообщает выделение,
-/// чтобы кнопки тулбара оборачивали выбранный текст.
+/// Многострочное поле для Markdown-редактора: сообщает и принимает
+/// выделение, чтобы кнопки тулбара оборачивали выбранный текст.
 struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var selection: NSRange
-    var onFocusChange: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> NSTextView {
         let textView = NSTextView()
@@ -35,7 +34,19 @@ struct MarkdownTextEditor: NSViewRepresentable {
     func updateNSView(_ textView: NSTextView, context: Context) {
         context.coordinator.parent = self
         if textView.string != text {
+            let keep = textView.selectedRange
             textView.string = text
+            let length = (text as NSString).length
+            if keep.location != NSNotFound, keep.location <= length {
+                textView.setSelectedRange(keep.clamped(to: length))
+            }
+        }
+        // Синхронизируем выделение (после действий тулбара), остерегаясь цикла.
+        let length = (text as NSString).length
+        if !NSEqualRanges(textView.selectedRange, selection),
+           selection.location != NSNotFound,
+           selection.location + selection.length <= length {
+            textView.setSelectedRange(selection)
         }
     }
 
@@ -57,16 +68,18 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            parent.selection = textView.selectedRange
-            parent.onFocusChange?()
+            if !NSEqualRanges(textView.selectedRange, parent.selection) {
+                parent.selection = textView.selectedRange
+            }
         }
     }
 }
 
 // MARK: - Markdown-редактор
 
-/// Редактор Markdown с тулбаром: обёртка выделения (**, *, ~~, `),
-/// префиксы строк (##, -, - [ ], >), вставка ссылки и предпросмотр.
+/// Редактор Markdown с тулбаром. Поле живёт в стабильной раскладке
+/// (высота не зависит от пустоты), предпросмотр накрывает его сверху,
+/// не пересоздавая — состояние и фокус не теряются.
 struct MarkdownEditor: View {
     @Binding var text: String
     var placeholder: String = ""
@@ -81,33 +94,32 @@ struct MarkdownEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             toolbar
             Divider()
-            if showsPreview {
-                ScrollView {
-                    Text(rendered)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 2)
-                }
-                .frame(minHeight: minHeight)
-            } else if text.isEmpty {
-                ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+                MarkdownTextEditor(text: $text, selection: $selection)
+                    .frame(minHeight: minHeight, alignment: .topLeading)
+                    .onChange(of: text) { _, _ in scheduleCommit() }
+
+                if text.isEmpty && !showsPreview {
                     Text(placeholder)
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                         .padding(.top, 2)
-                    editor
                 }
-            } else {
-                editor
+
+                if showsPreview {
+                    ScrollView {
+                        Text(rendered)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 2)
+                    }
+                    .frame(minHeight: minHeight)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.001))
+                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
             }
         }
         .padding(10)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private var editor: some View {
-        MarkdownTextEditor(text: $text, selection: $selection)
-            .frame(minHeight: text.isEmpty ? minHeight : nil, alignment: .topLeading)
-            .onChange(of: text) { _, _ in scheduleCommit() }
     }
 
     private var rendered: AttributedString {
@@ -116,17 +128,17 @@ struct MarkdownEditor: View {
 
     private var toolbar: some View {
         HStack(spacing: 2) {
-            ToolButton("bold", help: "Жирный") { wrap("**", placeholder: "жирный") }
-            ToolButton("italic", help: "Курсив") { wrap("*", placeholder: "курсив") }
-            ToolButton("strikethrough", help: "Зачёркнутый") { wrap("~~", placeholder: "зачёркнутый") }
-            ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { wrap("`", placeholder: "код") }
+            ToolButton("bold", help: "Жирный") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "**", placeholder: "жирный") } }
+            ToolButton("italic", help: "Курсив") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "*", placeholder: "курсив") } }
+            ToolButton("strikethrough", help: "Зачёркнутый") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "~~", placeholder: "зачёркнутый") } }
+            ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "`", placeholder: "код") } }
             toolDivider
-            ToolButton("textformat.size", help: "Заголовок") { prefixLine("## ") }
-            ToolButton("list.bullet", help: "Список") { prefixLine("- ") }
-            ToolButton("checklist", help: "Чекбокс") { prefixLine("- [ ] ") }
-            ToolButton("text.quote", help: "Цитата") { prefixLine("> ") }
+            ToolButton("textformat.size", help: "Заголовок") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "## ") } }
+            ToolButton("list.bullet", help: "Список") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- ") } }
+            ToolButton("checklist", help: "Чекбокс") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- [ ] ") } }
+            ToolButton("text.quote", help: "Цитата") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "> ") } }
             toolDivider
-            ToolButton("link", help: "Ссылка") { insertLink() }
+            ToolButton("link", help: "Ссылка") { apply { MarkdownTextOps.insertLink($0, range: $1) } }
             Spacer(minLength: 6)
             ToolButton(showsPreview ? "pencil.line" : "eye",
                        help: showsPreview ? "К редактору" : "Предпросмотр Markdown",
@@ -141,44 +153,11 @@ struct MarkdownEditor: View {
         Rectangle().fill(.separator.opacity(0.5)).frame(width: 1, height: 14).padding(.horizontal, 3)
     }
 
-    // MARK: Операции с текстом
-
-    private func wrap(_ marker: String, placeholder template: String) {
-        let view = NSString(string: text)
-        let range = selection.clamped(to: view.length)
-        let selected = view.substring(with: range)
-        let inner = selected.isEmpty ? template : selected
-        let replacement = marker + inner + marker
-        replace(range: range, with: replacement,
-                select: NSRange(location: range.location + marker.count, length: inner.count))
-    }
-
-    private func prefixLine(_ prefix: String) {
-        let view = NSString(string: text)
-        let range = selection.clamped(to: view.length)
-        let lineStart = max(0, (text as NSString).lineRange(for: NSRange(location: range.location, length: 0)).location)
-        replace(range: NSRange(location: lineStart, length: 0), with: prefix, select: nil)
-    }
-
-    private func insertLink() {
-        let view = NSString(string: text)
-        let range = selection.clamped(to: view.length)
-        let selected = view.substring(with: range)
-        let title = selected.isEmpty ? "ссылка" : selected
-        let replacement = "[\(title)](https://)"
-        let selectTitle = NSRange(location: range.location + 1, length: title.count)
-        let selectURL = NSRange(location: range.location + title.count + 3, length: "https://".count)
-        replace(range: range, with: replacement, select: range.length == 0 ? selectURL : selectTitle)
-    }
-
-    /// Замена диапазона с восстановлением выделения после пересборки строки.
-    private func replace(range: NSRange, with replacement: String, select: NSRange?) {
-        let view = NSString(string: text)
-        let updated = view.replacingCharacters(in: range, with: replacement)
-        text = updated
-        DispatchQueue.main.async {
-            selection = select ?? NSRange(location: range.location + replacement.count, length: 0)
-        }
+    /// Применяет чистую операцию к текущему тексту и выделению.
+    private func apply(_ operation: (String, NSRange) -> (String, NSRange)) {
+        let (updatedText, updatedSelection) = operation(text, selection)
+        text = updatedText
+        selection = updatedSelection
     }
 
     private func scheduleCommit() {
@@ -192,7 +171,7 @@ struct MarkdownEditor: View {
 }
 
 /// Иконка внутри стеклянной полосы: без собственной кнопочной
-/// графике, hover — тихий кружок, как в системных тулбарах.
+/// графики, hover — тихий кружок, как в системных тулбарах.
 struct ToolButton: View {
     let symbol: String
     var help: String = ""
@@ -223,13 +202,5 @@ struct ToolButton: View {
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .help(help.isEmpty ? symbol : help)
-    }
-}
-
-private extension NSRange {
-    func clamped(to length: Int) -> NSRange {
-        let location = Swift.min(self.location, length)
-        let upper = Swift.min(location + self.length, length)
-        return NSRange(location: location, length: upper - location)
     }
 }
