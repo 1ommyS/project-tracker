@@ -177,8 +177,9 @@ struct TodayView: View {
                         Divider().gridCellColumns(2 + days.count)
                     }
                 }
-                // Панель — внутри скролла: ширина равна содержимому (1290+),
-                // по высоте — растягивается на весь первый экран.
+                // Грид — идеальной высоты (строки не тянутся), панель — растягивается:
+                // fixedSize фиксирует содержимое, frame с maxHeight растит подложку.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(minWidth: 1290, maxHeight: .infinity, alignment: .topLeading)
                 .padding(PulseMetrics.card)
                 .pulsePanel(radius: 12)
