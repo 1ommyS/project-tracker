@@ -181,9 +181,15 @@ struct TodayView: View {
                 // таблица заполняет панель целиком, как лист Numbers.
                 .frame(minWidth: 1290, maxHeight: .infinity, alignment: .topLeading)
                 .padding(PulseMetrics.card)
-                .pulsePanel(radius: 12)
             }
+            // Карточка — фиксированной ширины страницы, углы всегда видны;
+            // широкая таблица прокручивается внутри неё.
+            .pulsePanel(radius: 12)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        // Ширина — как у остальных блоков страницы: панель не растягивается
+        // на всё окно, лишние колонки прокручиваются внутри неё.
+        .pageWidth()
         .frame(maxHeight: .infinity, alignment: .top)
     }
 

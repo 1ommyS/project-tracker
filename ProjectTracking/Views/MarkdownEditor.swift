@@ -131,18 +131,22 @@ struct MarkdownEditor: View {
     }
 
     private var toolbar: some View {
+        // Кластер кнопок переносится на новые строки в узкой колонке —
+        // тулбар не может распирать панель «Статусы по дням» шире соседних.
         HStack(spacing: 2) {
-            ToolButton("bold", help: "Жирный") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "**", placeholder: "жирный") } }
-            ToolButton("italic", help: "Курсив") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "*", placeholder: "курсив") } }
-            ToolButton("strikethrough", help: "Зачёркнутый") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "~~", placeholder: "зачёркнутый") } }
-            ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "`", placeholder: "код") } }
-            toolDivider
-            ToolButton("textformat.size", help: "Заголовок") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "## ") } }
-            ToolButton("list.bullet", help: "Список") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- ") } }
-            ToolButton("checklist", help: "Чекбокс") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- [ ] ") } }
-            ToolButton("text.quote", help: "Цитата") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "> ") } }
-            toolDivider
-            ToolButton("link", help: "Ссылка") { apply { MarkdownTextOps.insertLink($0, range: $1) } }
+            FlowLayout(spacing: 2) {
+                ToolButton("bold", help: "Жирный") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "**", placeholder: "жирный") } }
+                ToolButton("italic", help: "Курсив") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "*", placeholder: "курсив") } }
+                ToolButton("strikethrough", help: "Зачёркнутый") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "~~", placeholder: "зачёркнутый") } }
+                ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "`", placeholder: "код") } }
+                toolDivider
+                ToolButton("textformat.size", help: "Заголовок") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "## ") } }
+                ToolButton("list.bullet", help: "Список") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- ") } }
+                ToolButton("checklist", help: "Чекбокс") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- [ ] ") } }
+                ToolButton("text.quote", help: "Цитата") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "> ") } }
+                toolDivider
+                ToolButton("link", help: "Ссылка") { apply { MarkdownTextOps.insertLink($0, range: $1) } }
+            }
             Spacer(minLength: 6)
             ToolButton(showsPreview ? "pencil.line" : "eye",
                        help: showsPreview ? "К редактору" : "Предпросмотр Markdown",
