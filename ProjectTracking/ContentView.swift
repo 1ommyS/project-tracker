@@ -153,6 +153,7 @@ private struct MiniNavMap: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pointingHandOnHover()
             .help("Показать боковую панель")
 
             Divider().frame(width: 16)
@@ -190,6 +191,7 @@ private struct MiniNavMap: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHandOnHover()
         .help(destination.title)
     }
 }
