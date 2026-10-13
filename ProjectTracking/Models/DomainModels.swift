@@ -59,6 +59,13 @@ struct DailyStatus: Identifiable, Hashable, Sendable {
     var fileURL: URL? = nil
 }
 
+/// Артефакт проекта — гиперссылка (фигма, документ, репозиторий).
+struct ProjectArtifact: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var title: String
+    var url: String
+}
+
 struct Project: Identifiable, Hashable, Sendable {
     var id: UUID
     var title: String
@@ -74,6 +81,7 @@ struct Project: Identifiable, Hashable, Sendable {
     var updatedAt: Date
     var isArchived: Bool
     var statuses: [DailyStatus] = []
+    var artifacts: [ProjectArtifact] = []
     var folderURL: URL?
 
     var breadcrumb: [String] { [epic.nilIfBlank, parentProject.nilIfBlank, title.nilIfBlank].compactMap { $0 } }

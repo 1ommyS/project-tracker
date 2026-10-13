@@ -323,6 +323,30 @@ final class AppStore {
         await saveProject(value)
     }
 
+    // MARK: - Артефакты
+
+    func addArtifact(title: String, url: String, to project: Project) async {
+        guard let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+              isValidArtifactURL(trimmedURL) else { return }
+        var value = project
+        value.artifacts.append(ProjectArtifact(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? trimmedURL,
+            url: trimmedURL
+        ))
+        await saveProject(value)
+    }
+
+    private func isValidArtifactURL(_ value: String) -> Bool {
+        guard let url = URL(string: value) else { return false }
+        return url.scheme != nil || value.contains(".")
+    }
+
+    func removeArtifact(_ artifact: ProjectArtifact, from project: Project) async {
+        var value = project
+        value.artifacts.removeAll { $0.id == artifact.id }
+        await saveProject(value)
+    }
+
     // MARK: - Инлайн-переименование
 
     /// Правка дневного статуса: text/blockers = nil — не трогаем, пустая строка — очищает.
@@ -412,6 +436,38 @@ final class AppStore {
             if selectedProjectID == project.id { selectedProjectID = projects.first?.id }
             await notifications.syncIfAllowed(projects: projects)
         } catch { errorMessage = "Не удалось переместить проект в Корзину: \(error.localizedDescription)" }
+    }
+
+    /// Выгрузка хранилища в архив (rar при наличии, иначе zip) —
+    /// для безопасной репликации данных между обновлениями.
+    func archiveVault() {
+        let panel = NSSavePanel()
+        panel.title = "Архив хранилища"
+        panel.message = "Выгрузить текущее хранилище для репликации"
+        let stamp = "trace-vault-" + Date.now.formatted(.iso8601.year().month().day())
+        panel.nameFieldStringValue = "trace-vault-\(stamp)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let output = url.deletingPathExtension()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            Bundle.main.url(forResource: "archive-vault", withExtension: "sh")?.path
+                ?? "scripts/archive-vault.sh",
+            vaultURL.path,
+            output.path
+        ]
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                errorMessage = nil
+            } else {
+                errorMessage = "Не удалось создать архив (код \(process.terminationStatus))."
+            }
+        } catch {
+            errorMessage = "Не удалось запустить архивацию: \(error.localizedDescription)"
+        }
     }
 
     func chooseVault() async {

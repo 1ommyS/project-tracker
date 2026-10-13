@@ -32,6 +32,21 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertTrue(markdown.contains("📅 2026-10-20 ⏰ 18:30"))
     }
 
+    func testArtifactsRoundTrip() throws {
+        let project = Project(id: UUID(), title: "Ссылки", summary: "",
+                              tags: [], state: .active, tasks: [],
+                              createdAt: .now, updatedAt: .now, isArchived: false,
+                              artifacts: [ProjectArtifact(title: "Figma", url: "https://figma.com/file/1"),
+                                          ProjectArtifact(title: "OpenAPI", url: "https://api.example/schema.yaml")],
+                              folderURL: nil)
+        let markdown = MarkdownCodec.encode(project: project)
+        XCTAssertTrue(markdown.contains("## Артефакты"))
+        XCTAssertTrue(markdown.contains("- [Figma](https://figma.com/file/1)"))
+        let decoded = try MarkdownCodec.decodeProject(markdown, folderURL: URL(fileURLWithPath: "/tmp/a"))
+        XCTAssertEqual(decoded.artifacts.map { $0.title }, ["Figma", "OpenAPI"])
+        XCTAssertEqual(decoded.artifacts.map { $0.url }, project.artifacts.map { $0.url })
+    }
+
     func testDailyStatusRoundTrip() throws {
         let day = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 12))!
         let status = DailyStatus(id: UUID(), projectID: UUID(), date: day,

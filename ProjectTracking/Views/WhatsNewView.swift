@@ -23,6 +23,10 @@ nonisolated enum WhatsNewParser {
             if trimmed.hasPrefix("## ") {
                 if let section = current { sections.append(section) }
                 current = WhatsNewSection(title: String(trimmed.dropFirst(3)), blocks: [])
+            } else if trimmed.hasPrefix("# ") {
+                // Заголовок релизного файла: «# Trace v0.1.16 — дата».
+                if let section = current { sections.append(section) }
+                current = WhatsNewSection(title: String(trimmed.dropFirst(2)), blocks: [])
             } else if trimmed.hasPrefix("### ") {
                 current?.blocks.append(.header(String(trimmed.dropFirst(4))))
             } else if trimmed.hasPrefix("- ") {

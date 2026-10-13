@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import OSLog
@@ -29,6 +30,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Диагностическое сообщение для настроек: что пошло не так или когда придёт тестовый баннер.
     private(set) var statusMessage: String?
     private var isActivated = false
+    private var lastProjects: [Project] = []
     var onEvent: (@MainActor (Event) -> Void)?
 
     private var center: UNUserNotificationCenter { UNUserNotificationCenter.current() }
@@ -45,6 +47,18 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories([
             UNNotificationCategory(identifier: Constants.categoryID, actions: [complete], intentIdentifiers: [])
         ])
+        // Разрешение могли выдать в Системных настройках, пока приложение
+        // было свёрнуто, — при активации окна тихо пересобираем расписание.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, !self.lastProjects.isEmpty else { return }
+                await self.syncIfAllowed(projects: self.lastProjects)
+            }
+        }
         notificationLogger.info("Notification center activated")
     }
 
@@ -94,10 +108,12 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Расписание
 
     func sync(projects: [Project]) async {
+        lastProjects = projects
         var requests: [String: UNNotificationRequest] = [:]
         for project in projects where !project.isArchived {
             for task in project.tasks where !task.isDone {
                 guard let dueDate = task.dueDate, dueDate > .now else { continue }
+                let fireDate = reminderDate(for: dueDate)
                 let content = UNMutableNotificationContent()
                 content.title = "Пора выполнить задачу"
                 content.subtitle = project.pathLabel.isEmpty ? project.title : project.pathLabel
@@ -107,7 +123,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 content.categoryIdentifier = Constants.categoryID
                 content.userInfo = ["projectID": project.id.uuidString, "taskID": task.id.uuidString]
                 let trigger = UNCalendarNotificationTrigger(
-                    dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate),
+                    dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate),
                     repeats: false
                 )
                 requests[task.notificationID] = UNNotificationRequest(identifier: task.notificationID, content: content, trigger: trigger)
@@ -131,6 +147,16 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
         statusMessage = failures == 0 ? nil : "Не удалось запланировать \(failures) из \(requests.count) напоминаний."
         notificationLogger.info("Sync done: scheduled=\(requests.count, privacy: .public), removed=\(stale.count, privacy: .public), failed=\(failures, privacy: .public)")
+    }
+
+    /// «Весь день» (23:59) напоминаем утром в 9:00, если утро ещё впереди.
+    private func reminderDate(for dueDate: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute], from: dueDate)
+        guard components.hour == 23, components.minute == 59,
+              let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: dueDate),
+              morning > .now else { return dueDate }
+        return morning
     }
 
     // MARK: - Диагностика

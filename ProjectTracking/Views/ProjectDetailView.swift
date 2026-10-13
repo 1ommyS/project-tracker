@@ -19,6 +19,8 @@ struct ProjectDetailView: View {
     @State private var showDone = false
     @State private var deleteConfirmation = false
     @State private var statusDay = Date.now
+    @State private var artifactTitle = ""
+    @State private var artifactURL = ""
 
     var body: some View {
         if let project {
@@ -27,6 +29,7 @@ struct ProjectDetailView: View {
                     headerPanel(project)
                     infoPanel
                     statusesPanel(project)
+                    artifactsPanel(project)
                     tasksPanel(project)
                     Text("Создан \(project.createdAt.formatted(date: .abbreviated, time: .omitted)) · обновлён \(RuDate.relative(project.updatedAt))")
                         .font(.caption2)
@@ -196,6 +199,70 @@ struct ProjectDetailView: View {
             }
             .padding(10)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(PulseMetrics.card)
+        .pulsePanel(radius: 12)
+    }
+
+    // MARK: - Артефакты
+
+    /// Гиперссылки по проекту: фигма, документы, репозитории.
+    private func artifactsPanel(_ project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Артефакты", systemImage: "link").font(.title3.bold())
+                Spacer()
+                Text("\(project.artifacts.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            ForEach(project.artifacts) { artifact in
+                HStack(spacing: 8) {
+                    Image(systemName: "link")
+                        .foregroundStyle(.tint)
+                    if let url = URL(string: artifact.url) {
+                        Link(artifact.title, destination: url)
+                            .font(.body.weight(.medium))
+                            .underline()
+                    } else {
+                        Text(artifact.title).font(.body.weight(.medium))
+                    }
+                    Text(artifact.url)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Button {
+                        Task { await store.removeArtifact(artifact, from: project) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Убрать артефакт")
+                }
+                .padding(.vertical, 2)
+            }
+            HStack(spacing: 8) {
+                TextField("https://… или obsidian://…", text: $artifactURL)
+                    .textFieldStyle(.roundedBorder)
+                    .arrowCursorOnExit()
+                TextField("Название", text: $artifactTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    .arrowCursorOnExit()
+                Button("Добавить", systemImage: "plus") {
+                    Task {
+                        await store.addArtifact(title: artifactTitle, url: artifactURL, to: project)
+                        artifactTitle = ""
+                        artifactURL = ""
+                    }
+                }
+                .buttonStyle(.glass)
+                .disabled(artifactURL.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
         }
         .padding(PulseMetrics.card)
         .pulsePanel(radius: 12)

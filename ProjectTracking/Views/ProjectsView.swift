@@ -154,8 +154,16 @@ struct ProjectsView: View {
                 .background(.ultraThinMaterial)
 
             if let project = store.selectedProject, project.state.isActive, !project.isArchived {
-                ProjectDetailView(projectId: project.id)
-                    .frame(minWidth: 420)
+                ZStack {
+                    ProjectDetailView(projectId: project.id)
+                        .id(project.id)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                }
+                .animation(.spring(response: 0.32, dampingFraction: 0.9), value: store.selectedProjectID)
+                .frame(minWidth: 420)
             } else {
                 VStack(spacing: 14) {
                     EmptyState(symbol: "sidebar.right",

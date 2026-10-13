@@ -30,6 +30,9 @@ nonisolated enum MarkdownCodec {
         ## Статус
         \(project.status)
 
+        ## Артефакты
+        \(project.artifacts.map { "- [\($0.title)](\($0.url))" }.joined(separator: "\n"))
+
         ## Задачи
         \(tasks)
         """
@@ -59,6 +62,8 @@ nonisolated enum MarkdownCodec {
                        status: section("Статус", in: text), tags: tags,
                        state: state, tasks: tasks,
                        createdAt: created, updatedAt: updated, isArchived: archived,
+                       statuses: [],
+                       artifacts: parseArtifacts(section("Артефакты", in: text)),
                        folderURL: folderURL)
     }
 
@@ -131,6 +136,14 @@ nonisolated enum MarkdownCodec {
         let rest = text[range.upperBound...]
         let end = rest.range(of: "\n## ")?.lowerBound ?? rest.endIndex
         return String(rest[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Строки «- [Название](url)» -> артефакты.
+    private static func parseArtifacts(_ section: String) -> [ProjectArtifact] {
+        section.split(separator: "\n").compactMap { line in
+            guard let match = String(line).firstMatch(of: /^\s*-\s*\[(.+?)\]\((.+?)\)\s*$/) else { return nil }
+            return ProjectArtifact(title: String(match.output.1), url: String(match.output.2))
+        }
     }
 
     private static func parseArray(_ value: String) -> [String] {

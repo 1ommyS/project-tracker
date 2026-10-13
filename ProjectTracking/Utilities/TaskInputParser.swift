@@ -91,15 +91,11 @@ nonisolated enum TaskInputParser {
             components.hour = hour
             components.minute = minute
         } else {
-            components.hour = 9
-            components.minute = 0
+            // Без времени задача «висит весь день»: срок — конец дня.
+            components.hour = 23
+            components.minute = 59
         }
-        guard let date = calendar.date(from: components) else { return nil }
-        if time == nil, date <= now, calendar.isDate(date, inSameDayAs: now) {
-            // «сегодня» без времени, но 9:00 уже прошло — напомним в течение часа.
-            return calendar.date(byAdding: .hour, value: 1, to: now) ?? date
-        }
-        return date
+        return calendar.date(from: components)
     }
 
     private static func title(from input: String, removing ranges: [Range<String.Index>]) -> String {

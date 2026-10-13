@@ -56,7 +56,7 @@ def quarter(date: dt.datetime) -> str:
     return f"{date.year % 100:02d}Q{(date.month - 1) // 3 + 1}"
 
 
-def encode(title, epic, parent, state, tags, created, updated, archived, description, tasks, status=""):
+def encode(title, epic, parent, state, tags, created, updated, archived, description, tasks, status="", artifacts=""):
     task_lines = []
     for done, name, due in tasks:
         line = f"- [{'x' if done else ' '}] {name}"
@@ -82,6 +82,8 @@ def encode(title, epic, parent, state, tags, created, updated, archived, descrip
         f"{description}\n\n"
         "## Статус\n"
         f"{status}\n\n"
+        "## Артефакты\n"
+        f"{artifacts}\n\n"
         "## Задачи\n"
         + "\n".join(task_lines)
         + "\n"
@@ -309,6 +311,15 @@ STATUSES = {
 }
 
 
+ARTIFACTS = {
+    "redizayn-sayta": "- [Макеты в Figma](https://figma.com/file/trace-redesign)\n- [Брендбук](https://notion.so/trace-brand)",
+    "api-avtorizacii": "- [OpenAPI-схема](https://api.example/schema.yaml)",
+    "diplom-magistratury": "- [Папка с главами](https://icloud.com/diplom)\n- [ГОСТ по оформлению](https://gost.ru/7.32)",
+    "kurs-po-swiftui": "- [План курса](https://github.com/course/swiftui-plan)",
+    "migraciya-bazy": "- [План миграции](https://notion.so/migration-plan)",
+}
+
+
 def main() -> None:
     vault = sys.argv[1] if len(sys.argv) > 1 else (
         CONTAINER_VAULT if os.path.isdir(CONTAINER_VAULT) else DEFAULT_VAULT
@@ -333,7 +344,7 @@ def main() -> None:
         path = os.path.join(folder, project["slug"], "Project.md")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
-            handle.write(encode(tasks=project["tasks"], status=STATUSES.get(project["slug"], ""), **meta))
+            handle.write(encode(tasks=project["tasks"], status=STATUSES.get(project["slug"], ""), artifacts=ARTIFACTS.get(project["slug"], ""), **meta))
         with open(path, encoding="utf-8") as handle:
             proj_id = [ln.split(": ")[1].strip() for ln in handle.read().splitlines() if ln.startswith("id: ")][0]
         # Дневные статусы

@@ -293,6 +293,21 @@ final class AppStoreTests: XCTestCase {
         XCTAssertTrue(updated.tasks[0].isDone, "переключение чекбокса сохраняется на диск")
     }
 
+    func testArtifactsAddAndRemove() async throws {
+        let project = try await makeProject("Ссылки")
+        await store.addArtifact(title: "Figma", url: "https://figma.com/file/1", to: project)
+        XCTAssertEqual(try current().artifacts.count, 1)
+        await store.reload()
+        XCTAssertEqual(try current().artifacts.first?.url, "https://figma.com/file/1", "артефакт сохраняется в Project.md")
+
+        await store.addArtifact(title: "", url: "мусор", to: try current())
+        XCTAssertEqual(try current().artifacts.count, 1, "невалидный URL не добавляется")
+
+        let artifact = try XCTUnwrap(try current().artifacts.first)
+        await store.removeArtifact(artifact, from: try current())
+        XCTAssertTrue(try current().artifacts.isEmpty)
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

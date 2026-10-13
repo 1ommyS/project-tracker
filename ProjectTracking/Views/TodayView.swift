@@ -154,7 +154,7 @@ struct TodayView: View {
 
                             InlineEditableText(font: .callout,
                                                color: (project.latestBlockers ?? "").isEmpty ? .secondary : .red,
-                                               lineLimit: 4,
+                                               lineLimit: nil,
                                                tooltip: "Клик — правка блокеров (записывается в сегодняшний статус)",
                                                placeholder: "—",
                                                text: project.latestBlockers ?? "") { newBlockers in
@@ -181,8 +181,9 @@ struct TodayView: View {
         return VStack(alignment: .leading, spacing: 3) {
             InlineEditableText(font: .callout,
                                color: .secondary,
-                               lineLimit: 5,
-                               tooltip: "Статус на \(RuDate.dayMonthShort(day))",
+                               lineLimit: nil,
+                               tooltip: "Статус на \(RuDate.dayMonthShort(day)) — поддерживается Markdown",
+                               markdown: true,
                                placeholder: "—",
                                text: entry?.status ?? "") { newText in
                 Task { await store.setDailyStatus(text: newText, blockers: nil, for: project, on: day) }
@@ -200,32 +201,36 @@ struct TodayView: View {
                                 .font(.footnote)
                                 .foregroundStyle(task.isDone ? .secondary : .primary)
                                 .strikethrough(task.isDone)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .buttonStyle(.plain)
                     .help(task.isDone ? "Вернуть в работу" : "Отметить выполненной")
                 }
             }
-            // В сегодняшней колонке — открытые задачи проекта без срока:
-            // видно, что висит, прямо при заполнении статуса.
+            // В сегодняшней колонке — задачи проекта «на сегодня»:
+            // назначенные на этот день и висящие без срока.
             if Calendar.current.isDateInToday(day) {
-                ForEach(project.openTasks.filter { $0.dueDate == nil }) { task in
+                let todays = project.openTasks.filter {
+                    $0.dueDate == nil || Calendar.current.isDateInToday($0.dueDate ?? .distantPast)
+                }
+                ForEach(todays) { task in
+                    let isTimed = task.dueDate != nil
                     Button {
                         Task { await store.toggleTask(task, in: project) }
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle.dashed")
+                            Image(systemName: task.isDone ? "checkmark.circle.fill" : (isTimed ? "clock" : "circle.dashed"))
                                 .font(.footnote)
                                 .foregroundStyle(task.isDone ? AnyShapeStyle(PulseStyle.mint) : AnyShapeStyle(.tertiary))
                             Text(task.title)
                                 .font(.footnote)
                                 .foregroundStyle(task.isDone ? .secondary : .primary)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .buttonStyle(.plain)
-                    .help("Задача без срока — клик отмечает выполненной")
+                    .help(isTimed ? "Задача на сегодня — клик отмечает выполненной" : "Задача без срока — клик отмечает выполненной")
                 }
             }
         }

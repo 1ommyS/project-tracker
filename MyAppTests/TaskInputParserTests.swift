@@ -19,18 +19,18 @@ final class TaskInputParserTests: XCTestCase {
         XCTAssertEqual(parsed.dueDate, date(2026, 10, 13, 18, 30))
     }
 
-    func testTodayWithoutTime() {
+    func testTodayWithoutTimeIsAllDay() {
         let now = date(2026, 10, 12, 7, 0)
         let parsed = TaskInputParser.parse("Собрать макет сегодня", now: now, calendar: calendar)
         XCTAssertEqual(parsed.title, "Собрать макет")
-        XCTAssertEqual(parsed.dueDate, date(2026, 10, 12, 9, 0))
+        XCTAssertEqual(parsed.dueDate, date(2026, 10, 12, 23, 59), "без времени — конец дня")
     }
 
-    func testTodayWithoutTimeWhenMorningPassed() {
+    func testTodayWithoutTimeStillAllDayAfterNoon() {
         let now = date(2026, 10, 12, 15, 0)
         let parsed = TaskInputParser.parse("Собрать макет сегодня", now: now, calendar: calendar)
         XCTAssertEqual(parsed.title, "Собрать макет")
-        XCTAssertEqual(parsed.dueDate, now.addingTimeInterval(3600))
+        XCTAssertEqual(parsed.dueDate, date(2026, 10, 12, 23, 59), "задача висит весь день, а не +1 час")
     }
 
     func testTimeOnlyRollsToTomorrow() {
@@ -72,7 +72,7 @@ final class TaskInputParserTests: XCTestCase {
         let now = date(2026, 10, 12, 10, 0)
         let parsed = TaskInputParser.parse("Написать послезавтра конспект", now: now, calendar: calendar)
         XCTAssertEqual(parsed.title, "Написать конспект")
-        XCTAssertEqual(parsed.dueDate, date(2026, 10, 14, 9, 0))
+        XCTAssertEqual(parsed.dueDate, date(2026, 10, 14, 23, 59), "весь день")
     }
 
     // MARK: - Подсветка распознанного срока

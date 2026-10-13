@@ -279,6 +279,11 @@ struct InlineEditableDate: View {
     }
 
     private func text(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let isAllDay = components.hour == 23 && components.minute == 59
+        if isAllDay {
+            return Calendar.current.isDateInToday(date) ? "весь день" : "\(RuDate.dayMonthShort(date)) · весь день"
+        }
         if Calendar.current.isDateInToday(date) {
             return RuDate.timeOnly(date)
         }
@@ -300,6 +305,8 @@ struct InlineEditableText: View {
     var lineLimit: Int? = 1
     var tooltip: String = "Клик — переименовать"
     var pencilSize: CGFloat = 10
+    /// Показывает текст как инлайн-Markdown (жирный/курсив/ссылки/код).
+    var markdown = false
     let placeholder: String
     let text: String
     let onCommit: (String) -> Void
@@ -349,9 +356,24 @@ struct InlineEditableText: View {
     // место под карандаш зарезервировано — вёрстка не двигается.
     private var display: some View {
         HStack(spacing: 4) {
-            Text(text.isEmpty ? placeholder : text)
-                .font(font)
-                .foregroundStyle(text.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(color))
+            Group {
+                if text.isEmpty {
+                    Text(placeholder)
+                } else if markdown, let rendered = try? AttributedString(
+                    markdown: text,
+                    options: {
+                        var options = AttributedString.MarkdownParsingOptions()
+                        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+                        return options
+                    }()
+                ) {
+                    Text(rendered)
+                } else {
+                    Text(text)
+                }
+            }
+            .font(font)
+            .foregroundStyle(text.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(color))
                 .strikethrough(strikethrough)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)

@@ -233,7 +233,11 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 8) { vaultPath; chooseVaultButton }
                         }
                     }
-                    Text("Данные остаются локальными. Можно выбрать корень существующего Obsidian Vault; Trace создаст внутри папку Projects.")
+                    Button("Архивировать хранилище…", systemImage: "doc.zipper") {
+                        store.archiveVault()
+                    }
+                    .buttonStyle(.glass)
+                    Text("Выгрузка в rar (если установлен) или zip для безопасной репликации между обновлениями. Данные остаются локальными; можно выбрать корень существующего Obsidian Vault — Trace создаст внутри папку Projects.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Внешний вид") {
