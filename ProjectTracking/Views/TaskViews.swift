@@ -44,15 +44,6 @@ struct TaskRowView: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .animation(.snappy, value: task.isDone)
-        .contextMenu {
-            Button(task.isDone ? "Вернуть в работу" : "Отметить выполненной",
-                   systemImage: task.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle.fill") { onToggle() }
-            Button("Редактировать…", systemImage: "pencil") { onEdit() }
-            if let onDelete {
-                Divider()
-                Button("Удалить", systemImage: "trash", role: .destructive) { onDelete() }
-            }
-        }
     }
 }
 
@@ -108,6 +99,9 @@ struct TaskListSection: View {
                     onRename: { newTitle in Task { await store.renameTask(task, to: newTitle, in: project) } },
                     onSetDate: { newDate in Task { await store.setTaskDueDate(task, to: newDate, in: project) } },
                     onDelete: { Task { await store.deleteTask(task, in: project) } })
+            .taskContextMenu(task: task, project: project) {
+                taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id)
+            }
     }
 }
 

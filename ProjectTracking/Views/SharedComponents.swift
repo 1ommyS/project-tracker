@@ -486,5 +486,8 @@ struct ContextTaskRow: View {
             }
         }
         .sheet(item: $editor) { context in TaskEditorView(context: context) }
+        .taskContextMenu(task: context.task, project: context.project) {
+            editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
+        }
     }
 }

@@ -397,6 +397,7 @@ struct ProjectFeedCard: View {
         }
         .padding(PulseMetrics.card)
         .pulsePanel(radius: 12)
+        .projectContextMenu(project)
         .confirmationDialog("Удалить «\(project.title)»?", isPresented: $deleteConfirmation) {
             Button("Переместить в Корзину", role: .destructive) { Task { await store.delete(project) } }
         } message: { Text("Папка проекта будет перемещена в системную Корзину и сможет быть восстановлена.") }

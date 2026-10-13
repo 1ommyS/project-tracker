@@ -323,6 +323,17 @@ final class AppStore {
         await saveProject(value)
     }
 
+    func duplicateTask(_ task: ProjectTask, in project: Project) async {
+        var value = project
+        let copy = ProjectTask(title: task.title, isDone: task.isDone, dueDate: task.dueDate)
+        if let index = value.tasks.firstIndex(where: { $0.id == task.id }) {
+            value.tasks.insert(copy, at: index + 1)
+        } else {
+            value.tasks.append(copy)
+        }
+        await saveProject(value)
+    }
+
     // MARK: - Артефакты
 
     func addArtifact(title: String, url: String, to project: Project) async {

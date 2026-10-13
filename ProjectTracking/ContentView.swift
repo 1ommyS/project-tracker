@@ -89,10 +89,14 @@ struct ContentView: View {
     }
 
     private func taskEditorForQuickTask() {
-        guard let project = store.selectedProject.flatMap({ $0.isArchived ? nil : $0 }) ?? store.activeProjects.first else {
+        let target = store.quickTaskProjectID.flatMap { id in store.projects.first { $0.id == id && !$0.isCompleted } }
+            ?? store.selectedProject.flatMap { $0.isArchived ? nil : $0 }
+            ?? store.activeProjects.first
+        guard let project = target else {
             store.errorMessage = "Сначала создайте проект, чтобы добавить задачу."
             return
         }
+        store.quickTaskProjectID = nil
         taskEditor = TaskEditorContext(projectID: project.id, taskID: nil)
     }
 
@@ -336,6 +340,7 @@ private struct SidebarProjectRow: View {
         }
         .onTapGesture { store.openProject(project.id) }
         .onHover { isHovering = $0 }
+        .projectContextMenu(project)
     }
 }
 

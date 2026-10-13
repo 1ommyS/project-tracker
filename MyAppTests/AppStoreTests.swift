@@ -308,6 +308,21 @@ final class AppStoreTests: XCTestCase {
         XCTAssertTrue(try current().artifacts.isEmpty)
     }
 
+    func testDuplicateTaskInsertsAfterOriginal() async throws {
+        let project = try await makeProject("Дубли")
+        await store.addTask(title: "Оригинал", dueDate: nil, to: project)
+        let task = try XCTUnwrap(try current().openTasks.first)
+
+        await store.duplicateTask(task, in: try current())
+
+        let tasks = try current().tasks
+        XCTAssertEqual(tasks.count, 2)
+        XCTAssertEqual(tasks.map(\.title), ["Оригинал", "Оригинал"], "копия встаёт сразу после оригинала")
+        XCTAssertNotEqual(tasks[0].id, tasks[1].id)
+        await store.reload()
+        XCTAssertEqual(try current().tasks.count, 2, "дубликат сохраняется на диск")
+    }
+
     // MARK: - Стабильность порядка
 
     func testSavingDoesNotReorderMasterArray() async throws {

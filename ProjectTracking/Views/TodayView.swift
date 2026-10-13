@@ -148,6 +148,7 @@ struct TodayView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .pointingHandOnHover()
+                                .projectContextMenu(project)
                                 QuarterTag(quarter: project.quarter, compact: true)
                             }
                             .frame(width: 210, alignment: .leading)
@@ -235,6 +236,27 @@ struct TodayView: View {
             }
         }
         .frame(width: 210, alignment: .leading)
+        .contextMenu {
+            Button("Копировать статус", systemImage: "doc.on.doc") {
+                Clipboard.copy(entry?.status ?? "")
+            }
+            Button("Копировать с задачами", systemImage: "doc.on.doc.fill") {
+                var value = entry?.status ?? ""
+                let statusTasks = entry?.tasks.map { "- [\($0.isDone ? "x" : " ")] \($0.title)" }.joined(separator: "\n") ?? ""
+                if !statusTasks.isEmpty { value += "\n" + statusTasks }
+                if Calendar.current.isDateInToday(day) {
+                    let todays = project.openTasks
+                        .filter { $0.dueDate == nil || Calendar.current.isDateInToday($0.dueDate ?? .distantPast) }
+                        .map { $0.title }
+                    if !todays.isEmpty { value += "\n" + todays.joined(separator: "\n") }
+                }
+                Clipboard.copy(value.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            Divider()
+            Button("Очистить день", systemImage: "eraser", role: .destructive) {
+                Task { await store.setDailyStatus(text: "", blockers: "", for: project, on: day) }
+            }
+        }
     }
 
     @ViewBuilder

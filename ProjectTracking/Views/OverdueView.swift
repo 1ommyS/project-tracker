@@ -243,15 +243,7 @@ struct OverdueView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Отметить выполненной", systemImage: "checkmark.circle.fill") {
-                Task { await store.toggleTask(task, in: project) }
-            }
-            Divider()
-            Button("Удалить", systemImage: "trash", role: .destructive) {
-                Task { await store.deleteTask(task, in: project) }
-            }
-        }
+        .taskContextMenu(task: task, project: project)
     }
 
     private var worstOverdueDays: Int {

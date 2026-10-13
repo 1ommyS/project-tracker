@@ -244,6 +244,20 @@ struct ProjectDetailView: View {
                     .help("Убрать артефакт")
                 }
                 .padding(.vertical, 2)
+                .contextMenu {
+                    if let url = URL(string: artifact.url) {
+                        Button("Открыть", systemImage: "safari") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    Button("Копировать ссылку", systemImage: "doc.on.doc") {
+                        Clipboard.copy(artifact.url)
+                    }
+                    Divider()
+                    Button("Убрать артефакт", systemImage: "trash", role: .destructive) {
+                        Task { await store.removeArtifact(artifact, from: project) }
+                    }
+                }
             }
             HStack(spacing: 8) {
                 TextField("https://… или obsidian://…", text: $artifactURL)
