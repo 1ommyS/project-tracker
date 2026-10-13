@@ -177,11 +177,12 @@ struct TodayView: View {
                         Divider().gridCellColumns(2 + days.count)
                     }
                 }
-                .frame(minWidth: 1290, alignment: .leading)
+                // Панель — внутри скролла: ширина равна содержимому (1290+),
+                // по высоте — растягивается на весь первый экран.
+                .frame(minWidth: 1290, maxHeight: .infinity, alignment: .topLeading)
+                .padding(PulseMetrics.card)
+                .pulsePanel(radius: 12)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .padding(PulseMetrics.card)
-            .pulsePanel(radius: 12)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
