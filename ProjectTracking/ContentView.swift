@@ -137,31 +137,33 @@ struct ContentView: View {
 
 // MARK: - Мини-навигация (когда сайдбар свёрнут)
 
-/// Плавающая компактная glass-панель: только иконки, тултипы и бейдж
-/// просрочек; кнопка сверху возвращает боковую панель.
+/// Шторка мини-навигации: одна узкая полоса со стеклом, внутри —
+/// только иконки экранов; сверху — возврат боковой панели.
 private struct MiniNavMap: View {
     @Environment(AppStore.self) private var store
     let onShowSidebar: () -> Void
     private let destinations: [SidebarDestination] = [.today, .projects, .overdue, .search, .archive]
 
     var body: some View {
-        GlassEffectContainer(spacing: 6) {
-            VStack(spacing: 6) {
-                Button(action: onShowSidebar) {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.glass)
-                .help("Показать боковую панель")
-
-                ForEach(destinations) { destination in
-                    destinationButton(destination)
-                }
+        VStack(spacing: 2) {
+            Button(action: onShowSidebar) {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
-            .padding(7)
+            .buttonStyle(.plain)
+            .help("Показать боковую панель")
+
+            Divider().frame(width: 16)
+
+            ForEach(destinations) { destination in
+                destinationButton(destination)
+            }
         }
+        .padding(6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(.separator.opacity(0.4)))
         .padding(.leading, 10)
         .padding(.top, 8)
     }
@@ -172,22 +174,22 @@ private struct MiniNavMap: View {
             store.open(destination)
         } label: {
             Image(systemName: destination.symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 34, height: 34)
+                .font(.system(size: 13.5, weight: .medium))
+                .frame(width: 30, height: 30)
+                .foregroundStyle(isSelected ? store.palette.color : .secondary)
+                .background {
+                    if isSelected {
+                        Circle().fill(.quaternary)
+                    }
+                }
                 .overlay(alignment: .topTrailing) {
                     if destination == .overdue, store.overdueTasks.count > 0 {
-                        Text("\(store.overdueTasks.count)")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Capsule().fill(.red))
-                            .offset(x: 4, y: -4)
+                        Circle().fill(.red).frame(width: 6, height: 6).offset(x: 3, y: -2)
                     }
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.glass)
-        .tint(isSelected ? store.palette.color : .secondary)
+        .buttonStyle(.plain)
         .help(destination.title)
     }
 }
