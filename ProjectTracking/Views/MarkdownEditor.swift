@@ -97,6 +97,8 @@ struct MarkdownEditor: View {
             ZStack(alignment: .topLeading) {
                 MarkdownTextEditor(text: $text, selection: $selection)
                     .frame(minHeight: minHeight, alignment: .topLeading)
+                    .opacity(showsPreview ? 0 : 1)
+                    .allowsHitTesting(!showsPreview)
                     .onChange(of: text) { _, _ in scheduleCommit() }
 
                 if text.isEmpty && !showsPreview {
@@ -110,11 +112,13 @@ struct MarkdownEditor: View {
                     ScrollView {
                         Text(rendered)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 2)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 4)
                     }
                     .frame(minHeight: minHeight)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.001))
-                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.separator.opacity(0.3)))
                 }
             }
         }
