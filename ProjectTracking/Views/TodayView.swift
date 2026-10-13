@@ -131,7 +131,7 @@ struct TodayView: View {
                             Text(RuDate.dayMonthShort(day))
                                 .font(day == today ? .callout.weight(.bold) : .callout)
                                 .foregroundStyle(day == today ? Color.red : .secondary)
-                                .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
+                                .frame(width: 210, alignment: .leading)
                         }
                     }
                     .padding(.vertical, 6)
@@ -158,7 +158,7 @@ struct TodayView: View {
                                 .projectContextMenu(project)
                                 QuarterTag(quarter: project.quarter, compact: true)
                             }
-                            .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
+                            .frame(width: 210, alignment: .leading)
 
                             InlineEditableText(font: .callout,
                                                color: (project.latestBlockers ?? "").isEmpty ? .secondary : .red,
@@ -168,7 +168,7 @@ struct TodayView: View {
                                                text: project.latestBlockers ?? "") { newBlockers in
                                 Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: .now) }
                             }
-                            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+                            .frame(width: 200, alignment: .leading)
 
                             ForEach(days, id: \.self) { day in
                                 statusCell(project: project, day: day)
@@ -177,7 +177,7 @@ struct TodayView: View {
                         Divider().gridCellColumns(2 + days.count)
                     }
                 }
-                .frame(minWidth: 1340, alignment: .leading)
+                .frame(minWidth: 1290, alignment: .leading)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .padding(PulseMetrics.card)
@@ -245,7 +245,7 @@ struct TodayView: View {
                 }
             }
         }
-        .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
+        .frame(width: 210, alignment: .leading)
         .contextMenu {
             Button("Копировать статус", systemImage: "doc.on.doc") {
                 Clipboard.copy(entry?.status ?? "")
