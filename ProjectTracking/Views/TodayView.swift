@@ -40,40 +40,45 @@ struct TodayView: View {
     private var totalCount: Int { store.activeProjects.reduce(0) { $0 + $1.tasks.count } }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                switch store.interfaceMode {
-                case .detailed:
-                    detailedContent
-                case .focused:
-                    focusedContent
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    switch store.interfaceMode {
+                    case .detailed:
+                        detailedContent
+                    case .focused:
+                        focusedContent
+                    }
                 }
+                .padding(PulseMetrics.screen)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
             }
-            .padding(PulseMetrics.screen)
-            .frame(maxWidth: PulseMetrics.contentWidth, alignment: .leading)
+            .softScrollFade()
         }
-        .softScrollFade()
         .navigationTitle("Сегодня")
     }
 
-    /// Полный вид: матрица статусов занимает первый экран,
-    /// метрики и секции задач — ниже при прокрутке.
+    /// Полный вид: приветствие и метрики сверху, ниже — матрица статусов
+    /// на всю ширину окна, затем секции задач.
     @ViewBuilder
     private var detailedContent: some View {
-        statusMatrix
+        TodayHero(total: totalCount, done: doneCount,
+                  dueToday: dueToday.count, overdue: overdue.count,
+                  accent: store.palette.color,
+                  onOpenProjects: { store.open(.projects) })
+            .pageWidth()
 
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
             MetricCard(value: "\(openTasks.count)", label: "открытых задач", symbol: "circle.stack", tint: .blue)
             MetricCard(value: "\(dueToday.count)", label: "на сегодня", symbol: "sun.max.fill", tint: dueToday.isEmpty ? .green : PulseStyle.amber)
             MetricCard(value: "\(overdue.count)", label: "просрочено", symbol: "exclamationmark.triangle.fill", tint: overdue.isEmpty ? .green : .red)
         }
+        .pageWidth()
 
-        TodayHero(total: totalCount, done: doneCount,
-                  dueToday: dueToday.count, overdue: overdue.count,
-                  accent: store.palette.color,
-                  onOpenProjects: { store.open(.projects) })
+        statusMatrix
 
         sectionsContent
+            .pageWidth()
     }
 
     /// Фокус: без шапки и метрик — только просроченное и сегодняшнее.
@@ -126,7 +131,7 @@ struct TodayView: View {
                             Text(RuDate.dayMonthShort(day))
                                 .font(day == today ? .callout.weight(.bold) : .callout)
                                 .foregroundStyle(day == today ? Color.red : .secondary)
-                                .frame(width: 210, alignment: .leading)
+                                .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(.vertical, 6)
@@ -153,7 +158,7 @@ struct TodayView: View {
                                 .projectContextMenu(project)
                                 QuarterTag(quarter: project.quarter, compact: true)
                             }
-                            .frame(width: 210, alignment: .leading)
+                            .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
 
                             InlineEditableText(font: .callout,
                                                color: (project.latestBlockers ?? "").isEmpty ? .secondary : .red,
@@ -163,7 +168,7 @@ struct TodayView: View {
                                                text: project.latestBlockers ?? "") { newBlockers in
                                 Task { await store.setDailyStatus(text: nil, blockers: newBlockers, for: project, on: .now) }
                             }
-                            .frame(width: 200, alignment: .leading)
+                            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
 
                             ForEach(days, id: \.self) { day in
                                 statusCell(project: project, day: day)
@@ -172,10 +177,13 @@ struct TodayView: View {
                         Divider().gridCellColumns(2 + days.count)
                     }
                 }
-                .padding(PulseMetrics.card)
-                .frame(minWidth: 1290, alignment: .leading)
+                .frame(minWidth: 1340, alignment: .leading)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(PulseMetrics.card)
+            .pulsePanel(radius: 12)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     /// Ячейка дня: текст статуса + чекбоксы задач из файла статуса.
@@ -237,7 +245,7 @@ struct TodayView: View {
                 }
             }
         }
-        .frame(width: 210, alignment: .leading)
+        .frame(minWidth: 210, maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button("Копировать статус", systemImage: "doc.on.doc") {
                 Clipboard.copy(entry?.status ?? "")
