@@ -159,6 +159,17 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         return morning
     }
 
+    /// Открывает системную панель «Уведомления» — единственный путь
+    /// включить их, если запрос был отклонён.
+    func openSystemSettings() {
+        activate()
+        let pane = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        guard let url = URL(string: pane) else { return }
+        NSWorkspace.shared.open(url)
+        statusMessage = "Открыты Системные настройки → Уведомления — включите уведомления для Trace."
+        notificationLogger.info("Opened notification system settings pane")
+    }
+
     // MARK: - Диагностика
 
     /// Тестовый баннер через 5 секунд — мгновенная проверка доставки.

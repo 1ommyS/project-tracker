@@ -239,9 +239,12 @@ final class AppStore {
         }
         observeVault(at: vaultURL)
         presentWhatsNewIfVersionChanged()
-        // Разрешение спрашиваем при первом запуске: без него напоминания
-        // о сроках не появятся никогда, а пользователь этого не узнает.
+        // Разрешение спрашиваем при каждом запуске: сначала штатный запрос,
+        // а если разрешения нет — уводим в Системные настройки уведомлений.
         await notifications.authorizeAndSync(projects: projects)
+        if notifications.authorization != .allowed {
+            notifications.openSystemSettings()
+        }
     }
 
     func reload(showSpinner: Bool = true) async {
