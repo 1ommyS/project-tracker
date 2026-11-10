@@ -69,3 +69,7 @@ YAML-поля `epic`, `parent_project`, `tags` и старые разделы «
 ### Общая ширина раздела статусов
 
 Панель поиска и кнопок, таблица/список и нижняя строка используют один центрированный контейнер `PulseMetrics.contentWidth` (1000 точек) с внешним отступом `PulseMetrics.screen`. На широком окне края совпадают; в узком окне элементы управления переносятся, а дополнительные колонки прокручиваются внутри таблицы.
+
+### Иконка при Run из Xcode
+
+В AppIcon.icns собранного пакета подтверждён новый рисунок. macOS регистрирует несколько старых копий с тем же bundle identifier; это возможный источник устаревшего значка. Теперь `TraceAppDelegate` при старте задаёт `NSApplication.applicationIconImage` из локального `Resources/TraceLogo.png` текущего пакета, не меняя идентификатор/доступ к vault. Это штатный [API иконки Dock](https://developer.apple.com/documentation/appkit/nsapplication/applicationiconimage). 10 ноября проверены Stop → Run в Xcode и новый логотип в About Trace; 104 теста прошли.

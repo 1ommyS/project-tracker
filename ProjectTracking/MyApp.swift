@@ -1,7 +1,18 @@
+import AppKit
 import SwiftUI
+
+final class TraceAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Load the artwork from this build instead of Launch Services' cached app icon.
+        guard let url = Bundle.main.url(forResource: "TraceLogo", withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return }
+        NSApplication.shared.applicationIconImage = image
+    }
+}
 
 @main
 struct ProjectTrackingApp: App {
+    @NSApplicationDelegateAdaptor(TraceAppDelegate.self) private var appDelegate
     @State private var store = AppStore()
     @AppStorage("showMenuBarQuickStatus") private var showMenuBarQuickStatus = true
 
