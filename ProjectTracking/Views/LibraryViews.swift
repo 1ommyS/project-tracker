@@ -233,7 +233,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.glass)
                     if store.isArchivingVault { ProgressView("Архивирование продолжается, можно работать с интерфейсом…") }
-                    Text("Выгрузка в rar (если установлен) или zip для безопасной репликации между обновлениями. Данные остаются локальными; можно выбрать корень существующего Obsidian Vault — Trace создаст внутри папку Projects.")
+                    Text("Выгрузка в rar (если установлен) или zip для безопасной репликации между обновлениями. Данные остаются локальными; можно выбрать корень существующего Obsidian Vault — Trace Desktop создаст внутри папку Projects.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Внешний вид") {
@@ -258,7 +258,7 @@ struct SettingsView: View {
                             LabeledContent("Ближайшее", value: RuDate.dayMonthTime(next))
                         }
                         if !store.notifications.alertsEnabled {
-                            Text("Баннеры выключены в macOS. Включите уведомления Trace в Системных настройках.")
+                            Text("Баннеры выключены в macOS. Включите уведомления Trace Desktop в Системных настройках.")
                                 .foregroundStyle(.orange)
                         }
                         Button("Отправить тестовое напоминание", systemImage: "bell.badge") {
@@ -293,7 +293,7 @@ struct SettingsView: View {
                 }
                 Section("Быстрый ввод") {
                     Toggle("Показывать быстрый статус в строке меню macOS", isOn: $showMenuBarQuickStatus)
-                    Text("Откройте небольшое окно из строки меню, даже когда Trace не активен. В приложении — ⌘⇧S; сохранить заметку — ⌘↩.")
+                    Text("Откройте небольшое окно из строки меню, даже когда Trace Desktop не активен. В приложении — ⌘⇧S; сохранить заметку — ⌘↩.")
                         .font(.caption).foregroundStyle(.secondary)
                     OpenStatusGuideButton()
                 }

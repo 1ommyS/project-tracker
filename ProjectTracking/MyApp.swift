@@ -17,7 +17,7 @@ struct ProjectTrackingApp: App {
     @AppStorage("showMenuBarQuickStatus") private var showMenuBarQuickStatus = true
 
     var body: some Scene {
-        WindowGroup("Trace", id: "main") {
+        WindowGroup("Trace Desktop", id: "main") {
             ContentView()
                 .environment(store)
                 .task {
@@ -33,7 +33,7 @@ struct ProjectTrackingApp: App {
                 Button("Новая задача…") { store.openQuickTask() }.keyboardShortcut("t", modifiers: .command)
             }
             CommandGroup(after: .pasteboard) {
-                Button("Найти в Trace…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
+                Button("Найти в Trace Desktop…") { store.openSearch() }.keyboardShortcut("f", modifiers: .command)
             }
             CommandGroup(after: .toolbar) {
                 Button("Назад") { store.goBack() }.keyboardShortcut("[", modifiers: .command).disabled(!store.canGoBack)
@@ -45,8 +45,8 @@ struct ProjectTrackingApp: App {
             }
             CommandGroup(replacing: .help) {
                 OpenStatusGuideButton()
-                Button("Что нового в Trace") { store.openWhatsNew() }
-                Button("Горячие клавиши Trace") { store.openShortcutHelp() }
+                Button("Что нового в Trace Desktop") { store.openWhatsNew() }
+                Button("Горячие клавиши Trace Desktop") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)
@@ -69,7 +69,7 @@ struct ProjectTrackingApp: App {
         }
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
-        MenuBarExtra("Trace", systemImage: "square.and.pencil", isInserted: $showMenuBarQuickStatus) {
+        MenuBarExtra("Trace Desktop", systemImage: "square.and.pencil", isInserted: $showMenuBarQuickStatus) {
             TraceMenuBar().environment(store)
         }
         Settings {

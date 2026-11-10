@@ -24,7 +24,7 @@ nonisolated enum WhatsNewParser {
                 if let section = current { sections.append(section) }
                 current = WhatsNewSection(title: String(trimmed.dropFirst(3)), blocks: [])
             } else if trimmed.hasPrefix("# ") {
-                // Заголовок релизного файла: «# Trace v0.1.16 — дата».
+                // Заголовок релизного файла: «# Trace Desktop v0.1.16 — дата».
                 if let section = current { sections.append(section) }
                 current = WhatsNewSection(title: String(trimmed.dropFirst(2)), blocks: [])
             } else if trimmed.hasPrefix("### ") {

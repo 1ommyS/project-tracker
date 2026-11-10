@@ -71,7 +71,7 @@ actor MarkdownRepository {
         try fm.createDirectory(at: projectsURL, withIntermediateDirectories: true)
         let readme = rootURL.appendingPathComponent("README.md")
         if !fm.fileExists(atPath: readme.path) {
-            try "# Trace\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
+            try "# Trace Desktop\n\nЛокальное хранилище проектов. Папку можно открыть как Obsidian Vault.\n"
                 .write(to: readme, atomically: true, encoding: .utf8)
         }
     }

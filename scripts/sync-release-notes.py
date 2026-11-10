@@ -54,7 +54,7 @@ def main() -> None:
     upcoming = re.search(r"^## Следующий релиз\s*\n(.*?)(?=^## |\Z)", changelog, flags=re.S | re.M)
     if upcoming and upcoming.group(1).strip():
         with open(os.path.join(releases_dir, "NEXT.md"), "w", encoding="utf-8") as handle:
-            handle.write("# Trace — следующий релиз\n\n" + upcoming.group(1).strip() + "\n")
+            handle.write("# Trace Desktop — следующий релиз\n\n" + upcoming.group(1).strip() + "\n")
         print("releases/NEXT.md: обновлён (секция «Следующий релиз»)")
 
     print(f"releases/: обновлено {len(written)} файл(ов): {', '.join(written) or '—'}")

@@ -37,7 +37,7 @@ struct StatusTransferGuideView: View {
             }
             .pulsePanel()
             HStack {
-                Text("Trace принимает обычный текст или два Markdown-раздела. Приложение само не подключается к Confluence или модели.")
+                Text("Trace Desktop принимает обычный текст или два Markdown-раздела. Приложение само не подключается к Confluence или модели.")
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
                 OpenQuickStatusButton()

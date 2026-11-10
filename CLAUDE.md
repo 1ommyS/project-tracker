@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Read and follow [AGENTS.md](AGENTS.md) before changing Trace. It is the shared source of repository instructions, commands, compatibility constraints, and current architecture.
+Read and follow [AGENTS.md](AGENTS.md) before changing Trace Desktop. It is the shared source of repository instructions, commands, compatibility constraints, and current architecture.
 
 Current interaction rules:
 - A project is identified by its title in the UI; retain all legacy metadata on disk.
@@ -9,7 +9,7 @@ Current interaction rules:
 - Markdown formatting uses native AppKit input/Undo and UTF-16 ranges. Validate ambiguous reserved headings/unclosed code fences before saving; keep the draft and prior file on failure.
 - Serialize writes per project, apply mutations to the latest model, and rebase status URLs after folder moves.
 - «Статусы» (⌘6) offers a remembered Table/List switch. Table uses native virtualized rows and bounded excerpts; list renders full day cards lazily. Shared date/search/filter controls must describe their scope.
-- Align status controls, table/list and footer in one centered `PulseMetrics.contentWidth` container with screen insets. Extra day columns scroll inside it. Replace every AppIcon PNG resolution and the bundled Resources/TraceLogo.png together when changing the logo. The app delegate sets the Dock icon from that bundled image at launch; preserve the app bundle identifier. Additional Git destination is named tracking-app; keep origin intact.
+- Align status controls, table/list and footer in one centered `PulseMetrics.contentWidth` container with screen insets. Extra day columns scroll inside it. Replace every AppIcon PNG resolution and the bundled Resources/TraceLogo.png together when changing the logo. The app delegate sets the Dock icon from that bundled image at launch; preserve the app bundle identifier. Product/display name is Trace Desktop; keep scheme/module stable and update test host, scheme buildables and release/package paths together. Additional Git destination is named tracking-app; keep origin intact.
 - Repository warm scans cache decoded files with precise invalidation; never drop external events during self-writes. Reuse revision-based overview/agenda projections, avoid per-character re-parsing, and run archive subprocesses on the repository actor.
 - Performance benchmark fixture and limits are documented in docs/PERFORMANCE.md; do not equate file-load speedups with measured frame rate.
 - Keep row identities stable across Markdown reloads using optional trace task/artifact ID comments. Do not animate per keystroke or resize editors between edit/preview.

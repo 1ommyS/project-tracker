@@ -81,7 +81,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingShortcutHelp) { ShortcutHelpView() }
         .sheet(isPresented: $showingWhatsNew) { WhatsNewView() }
         .sheet(item: $taskEditor) { context in TaskEditorView(context: context) }
-        .alert("Trace", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
+        .alert("Trace Desktop", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
         .onAppear {

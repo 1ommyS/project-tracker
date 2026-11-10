@@ -154,9 +154,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace.app"
-          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/Trace-notarization.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/Trace-notarization.zip" \
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace Desktop.app"
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/Trace-Desktop-notarization.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Trace-Desktop-notarization.zip" \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
           xcrun stapler staple "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
@@ -164,7 +164,7 @@ jobs:
       - name: Package DMG and ZIP
         run: |
           chmod +x scripts/package-release.sh
-          scripts/package-release.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace.app" dist
+          scripts/package-release.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release/Trace Desktop.app" dist
 
       - name: Notarize and staple DMG
         if: steps.credentials.outputs.can_notarize == 'true'
@@ -173,10 +173,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
         run: |
-          xcrun notarytool submit dist/Trace.dmg \
+          xcrun notarytool submit dist/Trace-Desktop.dmg \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APP_PASSWORD" --wait
-          xcrun stapler staple dist/Trace.dmg
-          xcrun stapler validate dist/Trace.dmg
+          xcrun stapler staple dist/Trace-Desktop.dmg
+          xcrun stapler validate dist/Trace-Desktop.dmg
 
       - name: Publish GitHub Release
         env:
@@ -187,14 +187,14 @@ jobs:
         run: |
           ARGS=(
             --target "$RELEASE_SHA"
-            --title "Trace $RELEASE_TAG"
+            --title "Trace Desktop $RELEASE_TAG"
           )
           if [[ -n "$NOTES_SOURCE" ]]; then
             echo "Release notes: $NOTES_SOURCE"
-            gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
+            gh release create "$RELEASE_TAG" dist/Trace-Desktop.zip dist/Trace-Desktop.dmg \
               "${ARGS[@]}" --notes-file "$NOTES_SOURCE"
           else
             echo "No release notes file, generating notes automatically"
-            gh release create "$RELEASE_TAG" dist/Trace.zip dist/Trace.dmg \
+            gh release create "$RELEASE_TAG" dist/Trace-Desktop.zip dist/Trace-Desktop.dmg \
               "${ARGS[@]}" --generate-notes
           fi

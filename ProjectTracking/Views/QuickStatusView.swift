@@ -30,10 +30,10 @@ struct TraceMenuBar: View {
         OpenQuickStatusButton()
         OpenStatusGuideButton()
         Divider()
-        Button("Открыть Trace") { openWindow(id: "main"); NSApp.activate() }
+        Button("Открыть Trace Desktop") { openWindow(id: "main"); NSApp.activate() }
         SettingsLink { Text("Настройки…") }
         Divider()
-        Button("Завершить Trace") { NSApp.terminate(nil) }
+        Button("Завершить Trace Desktop") { NSApp.terminate(nil) }
     }
 }
 
@@ -74,7 +74,7 @@ struct QuickStatusView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(draft.projectID == nil || draft.text.nilIfBlank == nil)
             }
-            Text("⌘↩ — добавить · Закрытие окна сохраняет черновик до выхода из Trace")
+            Text("⌘↩ — добавить · Закрытие окна сохраняет черновик до выхода из Trace Desktop")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(PulseMetrics.screen)

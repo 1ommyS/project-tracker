@@ -81,7 +81,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         lastProjects = projects
         await refreshAuthorization()
         if authorization == .unknown { await requestAccess() }
-        if authorization == .denied { statusMessage = "Уведомления выключены в Системных настройках → Уведомления → Trace." }
+        if authorization == .denied { statusMessage = "Уведомления выключены в Системных настройках → Уведомления → Trace Desktop." }
         await sync(projects: projects)
     }
 
@@ -168,7 +168,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         testTask?.cancel()
         client.removeDelivered(["pulseboard.test"])
         let content = UNMutableNotificationContent()
-        content.title = "Проверка напоминаний Trace"
+        content.title = "Проверка напоминаний Trace Desktop"
         content.body = "Тест локального уведомления. Напоминания о задачах используют то же разрешение."
         content.sound = .default
         let request = UNNotificationRequest(identifier: "pulseboard.test", content: content,
@@ -187,9 +187,9 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     func checkTestDelivery() async {
         let delivered = await client.deliveredIDs()
         if delivered.contains("pulseboard.test") {
-            statusMessage = "macOS доставила тестовое уведомление. Если баннер не появился, проверьте «Фокусирование» и стиль уведомлений Trace."
+            statusMessage = "macOS доставила тестовое уведомление. Если баннер не появился, проверьте «Фокусирование» и стиль уведомлений Trace Desktop."
         } else {
-            statusMessage = "Доставка теста пока не подтверждена. Проверьте Центр уведомлений, «Фокусирование» и настройки Trace; удалённый баннер уже не виден диагностике."
+            statusMessage = "Доставка теста пока не подтверждена. Проверьте Центр уведомлений, «Фокусирование» и настройки Trace Desktop; удалённый баннер уже не виден диагностике."
         }
     }
 

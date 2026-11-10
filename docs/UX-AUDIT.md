@@ -73,3 +73,9 @@ YAML-поля `epic`, `parent_project`, `tags` и старые разделы «
 ### Иконка при Run из Xcode
 
 В AppIcon.icns собранного пакета подтверждён новый рисунок. macOS регистрирует несколько старых копий с тем же bundle identifier; это возможный источник устаревшего значка. Теперь `TraceAppDelegate` при старте задаёт `NSApplication.applicationIconImage` из локального `Resources/TraceLogo.png` текущего пакета, не меняя идентификатор/доступ к vault. Это штатный [API иконки Dock](https://developer.apple.com/documentation/appkit/nsapplication/applicationiconimage). 10 ноября проверены Stop → Run в Xcode и новый логотип в About Trace; 104 теста прошли.
+
+### Переименование в Trace Desktop
+
+По запросу пользователя системное имя, app bundle/executable, меню, гайд и релизные пакеты переименованы в Trace Desktop. Схема ProjectTracking и модуль PROJECT_Tracking сохранены; test host и buildable references указывают на новый продукт. Bundle identifier, ключи настроек, security-scoped bookmarks и формат Markdown не менялись.
+
+Проверка финального варианта: 104 теста без ошибок, подписанная Release-сборка, создание Trace-Desktop.zip / Trace-Desktop.dmg и Run в Xcode. В About Trace Desktop подтверждены новое имя и последняя иконка с диаграммой; AppIcon и ресурс Dock используют одинаковый квадратный исходник.

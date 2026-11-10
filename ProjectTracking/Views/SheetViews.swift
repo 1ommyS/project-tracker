@@ -110,7 +110,7 @@ struct ShortcutHelpView: View {
         ShortcutGroup(title: "Поиск и настройки", shortcuts: [
             .init(keys: ["⌘", "F"], title: "Найти", detail: "Открыть общий поиск и сразу перейти к вводу запроса."),
             .init(keys: ["⌘", "K"], title: "Поиск", detail: "Дополнительное сочетание для быстрого поиска."),
-            .init(keys: ["⌘", ","], title: "Настройки", detail: "Открыть системное окно настроек Trace."),
+            .init(keys: ["⌘", ","], title: "Настройки", detail: "Открыть системное окно настроек Trace Desktop."),
         ]),
     ]
 
