@@ -30,4 +30,24 @@ final class StatusesLayoutTests: XCTestCase {
             "тулбар редактора требует больше места, чем есть, и распирает панель"
         )
     }
+    @MainActor
+    func testDailyStatusesFitNarrowDetailColumn() {
+        let store = AppStore(vaultURL: FileManager.default.temporaryDirectory, notificationService: NotificationService(client: FakeNotificationClient()))
+        let project = Project(id: UUID(), title: "Длинное название проекта для проверки переноса", summary: "",
+                              tags: [], state: .active, tasks: [], createdAt: .now, updatedAt: .now,
+                              isArchived: false, folderURL: nil)
+        let section = DailyStatusesSection(projects: [project], day: .constant(.now)).environment(store)
+        XCTAssertLessThanOrEqual(fittedWidth(of: section, proposing: 380), 380.5)
+    }
+
+    @MainActor
+    func testStatusesControlsFitNarrowDetailColumn() {
+        let store = AppStore(vaultURL: FileManager.default.temporaryDirectory, notificationService: NotificationService(client: FakeNotificationClient()))
+        store.projects = [Project(id: UUID(), title: "Проект", summary: "", tags: [], state: .active, tasks: [],
+                                  createdAt: .now, updatedAt: .now, isArchived: false, folderURL: nil)]
+        let view = StatusesView().environment(store)
+        XCTAssertLessThanOrEqual(fittedWidth(of: view, proposing: 440), 440.5,
+                                 "Панель поиска/фильтров должна переноситься внутри узкой колонки")
+    }
+
 }

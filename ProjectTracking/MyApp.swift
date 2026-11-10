@@ -3,9 +3,10 @@ import SwiftUI
 @main
 struct ProjectTrackingApp: App {
     @State private var store = AppStore()
+    @AppStorage("showMenuBarQuickStatus") private var showMenuBarQuickStatus = true
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Trace", id: "main") {
             ContentView()
                 .environment(store)
                 .task {
@@ -27,21 +28,43 @@ struct ProjectTrackingApp: App {
                 Button("Назад") { store.goBack() }.keyboardShortcut("[", modifiers: .command).disabled(!store.canGoBack)
                 Button("Вперёд") { store.goForward() }.keyboardShortcut("]", modifiers: .command).disabled(!store.canGoForward)
             }
+            CommandMenu("Статусы") {
+                OpenQuickStatusButton().environment(store).keyboardShortcut("s", modifiers: [.command, .shift])
+                OpenStatusGuideButton()
+            }
             CommandGroup(replacing: .help) {
+                OpenStatusGuideButton()
                 Button("Что нового в Trace") { store.openWhatsNew() }
                 Button("Горячие клавиши Trace") { store.openShortcutHelp() }
             }
             CommandMenu("Навигация") {
                 Button("Сегодня") { store.open(.today) }.keyboardShortcut("1", modifiers: .command)
+                Button("Статусы") { store.open(.statuses) }.keyboardShortcut("6", modifiers: .command)
                 Button("Проекты") { store.open(.projects) }.keyboardShortcut("2", modifiers: .command)
                 Button("Просрочено") { store.open(.overdue) }.keyboardShortcut("3", modifiers: .command)
                 Button("Поиск") { store.open(.search) }.keyboardShortcut("4", modifiers: .command)
                 Button("Архив") { store.open(.archive) }.keyboardShortcut("5", modifiers: .command)
             }
         }
+        Window("Быстрый статус", id: "quick-status") {
+            QuickStatusView().environment(store).environment(\.locale, Locale(identifier: "ru_RU"))
+        }
+        .windowResizability(.contentSize)
+        .windowLevel(.floating)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        Window("Статусы из Confluence", id: "status-guide") {
+            StatusTransferGuideView().environment(store).environment(\.locale, Locale(identifier: "ru_RU"))
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        MenuBarExtra("Trace", systemImage: "square.and.pencil", isInserted: $showMenuBarQuickStatus) {
+            TraceMenuBar().environment(store)
+        }
         Settings {
             SettingsView()
                 .environment(store)
+                .environment(\.locale, Locale(identifier: "ru_RU"))
                 .frame(minWidth: 480, idealWidth: 620, maxWidth: 760, minHeight: 420, idealHeight: 560, maxHeight: 820)
         }
     }

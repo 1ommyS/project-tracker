@@ -1,191 +1,181 @@
 import AppKit
 import SwiftUI
 
-// MARK: - NSTextView с выбором диапазона
+@MainActor
+final class MarkdownEditorController {
+    weak var textView: NSTextView?
 
-/// Многострочное поле для Markdown-редактора: сообщает и принимает
-/// выделение, чтобы кнопки тулбара оборачивали выбранный текст.
+    func apply(_ operation: (String, NSRange) -> (text: String, selection: NSRange)) {
+        guard let textView, textView.isEditable else { return }
+        let result = operation(textView.string, textView.selectedRange())
+        textView.window?.makeFirstResponder(textView)
+        // insertText проходит через стандартный механизм ввода AppKit и Undo.
+        textView.insertText(result.text, replacementRange: NSRange(location: 0, length: textView.string.utf16.count))
+        textView.setSelectedRange(result.selection.clamped(to: textView.string.utf16.count))
+        textView.scrollRangeToVisible(textView.selectedRange())
+    }
+}
+
+/// NSTextView обязательно живёт в NSScrollView: длинный текст переносится
+/// по ширине и прокручивается, а курсор остаётся в видимой области.
 struct MarkdownTextEditor: NSViewRepresentable {
     @Binding var text: String
-    @Binding var selection: NSRange
+    let controller: MarkdownEditorController
+    var isEditing = true
+    var autofocus = false
 
-    func makeNSView(context: Context) -> NSTextView {
-        let textView = NSTextView()
-        textView.isEditable = true
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        let textView = NSTextView(frame: scrollView.contentView.bounds)
+        textView.isEditable = isEditing
         textView.isSelectable = true
         textView.isRichText = false
+        textView.importsGraphics = false
         textView.drawsBackground = false
-        textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         textView.textColor = .labelColor
         textView.insertionPointColor = .labelColor
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
         textView.allowsUndo = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainerInset = .zero
+        textView.textContainerInset = NSSize(width: 4, height: 6)
         textView.autoresizingMask = [.width]
-        textView.delegate = context.coordinator
         textView.string = text
-        return textView
-    }
-
-    func updateNSView(_ textView: NSTextView, context: Context) {
-        context.coordinator.parent = self
-        if textView.string != text {
-            let keep = textView.selectedRange
-            textView.string = text
-            let length = (text as NSString).length
-            if keep.location != NSNotFound, keep.location <= length {
-                textView.setSelectedRange(keep.clamped(to: length))
+        textView.delegate = context.coordinator
+        textView.setAccessibilityLabel("Текст Markdown")
+        scrollView.documentView = textView
+        controller.textView = textView
+        if autofocus && isEditing {
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, textView.window?.firstResponder !== textView else { return }
+                textView.window?.makeFirstResponder(textView)
             }
         }
-        // Синхронизируем выделение (после действий тулбара), остерегаясь цикла.
-        let length = (text as NSString).length
-        if !NSEqualRanges(textView.selectedRange, selection),
-           selection.location != NSNotFound,
-           selection.location + selection.length <= length {
-            textView.setSelectedRange(selection)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        controller.textView = textView
+        if textView.string != text, !textView.hasMarkedText() {
+            let selection = textView.selectedRange()
+            textView.string = text
+            textView.setSelectedRange(selection.clamped(to: text.utf16.count))
+            textView.undoManager?.removeAllActions()
+        }
+        let becameEditable = !textView.isEditable && isEditing
+        textView.isEditable = isEditing
+        if becameEditable, autofocus {
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView else { return }
+                textView.window?.makeFirstResponder(textView)
+            }
+        }
+        if !isEditing, textView.window?.firstResponder === textView {
+            textView.window?.makeFirstResponder(nil)
         }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: MarkdownTextEditor
-
-        init(_ parent: MarkdownTextEditor) {
-            self.parent = parent
-        }
+        init(_ parent: MarkdownTextEditor) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
         }
-
-        func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            if !NSEqualRanges(textView.selectedRange, parent.selection) {
-                parent.selection = textView.selectedRange
-            }
-        }
     }
 }
 
-// MARK: - Markdown-редактор
-
-/// Редактор Markdown с тулбаром. Поле живёт в стабильной раскладке
-/// (высота не зависит от пустоты), предпросмотр накрывает его сверху,
-/// не пересоздавая — состояние и фокус не теряются.
 struct MarkdownEditor: View {
     @Binding var text: String
     var placeholder: String = ""
     var minHeight: CGFloat = 110
-
-    @State private var selection = NSRange(location: 0, length: 0)
+    var autofocus = false
+    var isActive = true
+    @State private var controller = MarkdownEditorController()
     @State private var showsPreview = false
-    @State private var commitTask: Task<Void, Never>?
-    var onCommit: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack { Text("Markdown").foregroundStyle(.secondary); Spacer(); modePicker }
+                modePicker
+            }
             toolbar
+                .disabled(showsPreview)
             Divider()
             ZStack(alignment: .topLeading) {
-                MarkdownTextEditor(text: $text, selection: $selection)
-                    .frame(minHeight: minHeight, alignment: .topLeading)
+                MarkdownTextEditor(text: $text, controller: controller, isEditing: !showsPreview && isActive, autofocus: autofocus)
+                    .frame(height: minHeight)
                     .opacity(showsPreview ? 0 : 1)
                     .allowsHitTesting(!showsPreview)
-                    .onChange(of: text) { _, _ in scheduleCommit() }
-
+                    .accessibilityHidden(showsPreview)
                 if text.isEmpty && !showsPreview {
-                    Text(placeholder)
-                        .foregroundStyle(.tertiary)
+                    Text(placeholder).foregroundStyle(.tertiary)
+                        .padding(.horizontal, 4).padding(.top, 6)
                         .allowsHitTesting(false)
-                        .padding(.top, 2)
                 }
-
                 if showsPreview {
                     ScrollView {
-                        Text(rendered)
+                        MarkdownPreview(text: text.isEmpty ? "Нет текста для просмотра" : text).equatable()
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 4)
                     }
-                    .frame(minHeight: minHeight)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.separator.opacity(0.3)))
+                    .frame(height: minHeight)
+                    .background(.background)
                 }
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(12)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private var rendered: AttributedString {
-        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    private var modePicker: some View {
+        Picker("Режим редактора", selection: $showsPreview) {
+            Text("Редактор").tag(false)
+            Text("Просмотр").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
     }
 
     private var toolbar: some View {
-        // Кластер кнопок переносится на новые строки в узкой колонке —
-        // тулбар не может распирать панель «Статусы по дням» шире соседних.
-        HStack(spacing: 2) {
-            FlowLayout(spacing: 2) {
-                ToolButton("bold", help: "Жирный") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "**", placeholder: "жирный") } }
-                ToolButton("italic", help: "Курсив") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "*", placeholder: "курсив") } }
-                ToolButton("strikethrough", help: "Зачёркнутый") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "~~", placeholder: "зачёркнутый") } }
-                ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { apply { MarkdownTextOps.wrap($0, range: $1, marker: "`", placeholder: "код") } }
-                toolDivider
-                ToolButton("textformat.size", help: "Заголовок") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "## ") } }
-                ToolButton("list.bullet", help: "Список") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- ") } }
-                ToolButton("checklist", help: "Чекбокс") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- [ ] ") } }
-                ToolButton("text.quote", help: "Цитата") { apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "> ") } }
-                toolDivider
-                ToolButton("link", help: "Ссылка") { apply { MarkdownTextOps.insertLink($0, range: $1) } }
-            }
-            Spacer(minLength: 6)
-            ToolButton(showsPreview ? "pencil.line" : "eye",
-                       help: showsPreview ? "К редактору" : "Предпросмотр Markdown",
-                       tint: .secondary) { showsPreview.toggle() }
-        }
-        .padding(4)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.separator.opacity(0.35)))
-    }
-
-    private var toolDivider: some View {
-        Rectangle().fill(.separator.opacity(0.5)).frame(width: 1, height: 14).padding(.horizontal, 3)
-    }
-
-    /// Применяет чистую операцию к текущему тексту и выделению.
-    private func apply(_ operation: (String, NSRange) -> (String, NSRange)) {
-        let (updatedText, updatedSelection) = operation(text, selection)
-        text = updatedText
-        selection = updatedSelection
-    }
-
-    private func scheduleCommit() {
-        commitTask?.cancel()
-        commitTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(700))
-            guard !Task.isCancelled else { return }
-            onCommit?()
+        FlowLayout(spacing: 4) {
+            ToolButton("bold", help: "Жирный") { controller.apply { MarkdownTextOps.wrap($0, range: $1, marker: "**", placeholder: "жирный") } }
+            ToolButton("italic", help: "Курсив") { controller.apply { MarkdownTextOps.wrap($0, range: $1, marker: "*", placeholder: "курсив") } }
+            ToolButton("strikethrough", help: "Зачёркнутый") { controller.apply { MarkdownTextOps.wrap($0, range: $1, marker: "~~", placeholder: "зачёркнутый") } }
+            ToolButton("chevron.left.forwardslash.chevron.right", help: "Код") { controller.apply { MarkdownTextOps.wrap($0, range: $1, marker: "`", placeholder: "код") } }
+            ToolButton("textformat.size", help: "Заголовок") { controller.apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "### ") } }
+            ToolButton("list.bullet", help: "Список") { controller.apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- ") } }
+            ToolButton("checklist", help: "Чекбокс") { controller.apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "- [ ] ") } }
+            ToolButton("text.quote", help: "Цитата") { controller.apply { MarkdownTextOps.prefixLine($0, range: $1, prefix: "> ") } }
+            ToolButton("link", help: "Ссылка") { controller.apply { MarkdownTextOps.insertLink($0, range: $1) } }
         }
     }
 }
 
-/// Иконка внутри стеклянной полосы: без собственной кнопочной
-/// графики, hover — тихий кружок, как в системных тулбарах.
 struct ToolButton: View {
     let symbol: String
     var help: String = ""
     var tint: Color = .primary
     var action: () -> Void
-    @State private var isHovering = false
 
     init(_ symbol: String, help: String = "", tint: Color = .primary, action: @escaping () -> Void) {
         self.symbol = symbol
@@ -197,18 +187,74 @@ struct ToolButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12.5, weight: .medium))
-                .frame(width: 28, height: 24)
+                .frame(width: 30, height: 24)
                 .foregroundStyle(tint)
-                .background {
-                    if isHovering {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.quinary)
-                    }
-                }
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(help.isEmpty ? symbol : help)
+        .buttonStyle(.borderless)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+/// Блочная разметка остаётся блочной: Text(AttributedString(markdown:))
+/// сам по себе склеивает абзацы и не рисует заголовки и маркеры списков.
+struct MarkdownPreview: View, Equatable {
+    let text: String
+
+    private struct Line: Identifiable {
+        let id: Int
+        let text: String
+        let isCode: Bool
+    }
+
+    private var lines: [Line] {
+        var fence: String?
+        return text.components(separatedBy: .newlines).enumerated().compactMap { index, line in
+            let next = MarkdownCodec.codeFence(after: line, current: fence)
+            if next != fence { fence = next; return nil }
+            return Line(id: index, text: line, isCode: fence != nil)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(lines) { line in
+                if line.isCode {
+                    Text(line.text.isEmpty ? " " : line.text)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                } else {
+                    formattedLine(line.text)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func formattedLine(_ line: String) -> some View {
+        let hashes = line.prefix(while: { $0 == "#" }).count
+        if (1...6).contains(hashes), line.dropFirst(hashes).hasPrefix(" ") {
+            inline(String(line.dropFirst(hashes + 1)))
+                .font(hashes <= 2 ? .title2.bold() : .headline)
+        } else if line.hasPrefix("- [ ] ") || line.lowercased().hasPrefix("- [x] ") {
+            HStack(alignment: .top) {
+                Image(systemName: line.lowercased().hasPrefix("- [x]") ? "checkmark.square" : "square")
+                inline(String(line.dropFirst(6)))
+            }
+        } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+            HStack(alignment: .top) { Text("•"); inline(String(line.dropFirst(2))) }
+        } else if line.hasPrefix("> ") {
+            HStack(alignment: .top) { Text("│").foregroundStyle(.secondary); inline(String(line.dropFirst(2))) }
+        } else {
+            inline(line.isEmpty ? " " : line)
+        }
+    }
+
+    private func inline(_ value: String) -> some View {
+        Text((try? AttributedString(markdown: value, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+             ?? AttributedString(value))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @State private var showingNewProject = false
     @State private var showingRecentProjects = false
     @State private var showingShortcutHelp = false
@@ -15,7 +16,7 @@ struct ContentView: View {
             PulseSidebar()
         } detail: {
             Group {
-                if store.isLoading {
+                if store.isLoading && store.projects.isEmpty {
                     ProgressView("Читаю Markdown-хранилище…")
                 } else {
                     destinationView
@@ -24,16 +25,11 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.18), value: store.destination)
-            .overlay(alignment: .topLeading) {
-                if columnVisibility == .detailOnly {
-                    MiniNavMap { columnVisibility = .all }
-                        .transition(.move(edge: .leading).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.25), value: columnVisibility)
+
         }
         .frame(minWidth: 680, minHeight: 520)
         .tint(store.palette.color)
+        .environment(\.locale, Locale(identifier: "ru_RU"))
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { store.goBack() } label: { Label("Назад", systemImage: "chevron.backward") }
@@ -47,18 +43,24 @@ struct ContentView: View {
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItemGroup {
-                Picker("Вид", selection: Binding(
-                    get: { store.interfaceMode },
-                    set: { store.interfaceMode = $0 }
-                )) {
-                    ForEach(InterfaceMode.allCases) { mode in
-                        Image(systemName: mode.symbol).tag(mode)
+                if store.destination == .today || (store.destination == .projects && store.projectsPresentation == .feed) {
+                    Picker("Вид", selection: Binding(
+                        get: { store.interfaceMode },
+                        set: { store.interfaceMode = $0 }
+                    )) {
+                        ForEach(InterfaceMode.allCases) { mode in
+                            Label(mode.title, systemImage: mode.symbol).tag(mode)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .help("Фокус — только срочное; Подробно — все детали")
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .help("Фокус — только срочное; Подробно — все детали")
 
+                }
+
+                OpenQuickStatusButton()
+                    .labelStyle(.iconOnly)
+                    .help("Быстрый статус (⌘⇧S)")
                 Button { taskEditorForQuickTask() } label: { Label("Новая задача", systemImage: "plus.circle") }
                     .labelStyle(.iconOnly)
                     .keyboardShortcut("t", modifiers: .command)
@@ -82,6 +84,9 @@ struct ContentView: View {
         .alert("Trace", isPresented: .init(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
+        .onAppear {
+            store.openMainWindow = { openWindow(id: "main"); NSApp.activate() }
+        }
         .onChange(of: store.recentProjectsRequest) { _, _ in showingRecentProjects = true }
         .onChange(of: store.shortcutHelpRequest) { _, _ in showingShortcutHelp = true }
         .onChange(of: store.whatsNewRequest) { _, _ in showingWhatsNew = true }
@@ -112,6 +117,9 @@ struct ContentView: View {
                 }
             }
             Divider()
+            OpenQuickStatusButton()
+            OpenStatusGuideButton()
+            Divider()
             Button {
                 columnVisibility = .all
             } label: {
@@ -120,12 +128,13 @@ struct ContentView: View {
         } label: {
             Label("Навигация", systemImage: "square.grid.2x2")
         }
-        .help("Экраны и навигация (⌘1…⌘4)")
+        .help("Экраны и навигация (⌘1…⌘6)")
     }
 
     @ViewBuilder private var destinationView: some View {
         switch store.destination {
         case .today: TodayView()
+        case .statuses: StatusesView()
         case .projects: ProjectsView()
         case .overdue: OverdueView()
         case .search: SearchView()
@@ -135,80 +144,34 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Мини-навигация (когда сайдбар свёрнут)
-
-/// Шторка мини-навигации: одна узкая полоса со стеклом, внутри —
-/// только иконки экранов; сверху — возврат боковой панели.
-private struct MiniNavMap: View {
-    @Environment(AppStore.self) private var store
-    let onShowSidebar: () -> Void
-    private let destinations: [SidebarDestination] = [.today, .projects, .overdue, .search, .archive]
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Button(action: onShowSidebar) {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .pointingHandOnHover()
-            .help("Показать боковую панель")
-
-            Divider().frame(width: 16)
-
-            ForEach(destinations) { destination in
-                destinationButton(destination)
-            }
-        }
-        .padding(6)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(.separator.opacity(0.4)))
-        .padding(.leading, 10)
-        .padding(.top, 8)
-    }
-
-    private func destinationButton(_ destination: SidebarDestination) -> some View {
-        let isSelected = store.destination == destination
-        return Button {
-            store.open(destination)
-        } label: {
-            Image(systemName: destination.symbol)
-                .font(.system(size: 13.5, weight: .medium))
-                .frame(width: 30, height: 30)
-                .foregroundStyle(isSelected ? store.palette.color : .secondary)
-                .background {
-                    if isSelected {
-                        Circle().fill(.quaternary)
-                    }
-                }
-                .overlay(alignment: .topTrailing) {
-                    if destination == .overdue, store.overdueTasks.count > 0 {
-                        Circle().fill(.red).frame(width: 6, height: 6).offset(x: 3, y: -2)
-                    }
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .pointingHandOnHover()
-        .help(destination.title)
-    }
-}
-
 // MARK: - Боковая панель (нативный список)
 
 private struct PulseSidebar: View {
     @Environment(AppStore.self) private var store
     @State private var collapsedQuarters: Set<String> = []
-    private let primary: [SidebarDestination] = [.today, .projects, .overdue, .search]
+    private let primary: [SidebarDestination] = [.today, .statuses, .projects, .overdue, .search]
     private let library: [SidebarDestination] = [.archive, .settings]
 
-    private var selection: Binding<SidebarDestination?> {
+    private enum Selection: Hashable {
+        case destination(SidebarDestination)
+        case project(UUID)
+    }
+
+    private var selection: Binding<Selection?> {
         Binding(
-            get: { store.destination },
-            set: { destination in
-                if let destination { store.open(destination) }
+            get: {
+                if store.destination == .projects, store.projectsPresentation == .editor,
+                   let id = store.selectedProjectID {
+                    return .project(id)
+                }
+                return .destination(store.destination)
+            },
+            set: { selection in
+                switch selection {
+                case .destination(let destination): store.open(destination)
+                case .project(let id): store.openProject(id)
+                case nil: break
+                }
             }
         )
     }
@@ -217,7 +180,7 @@ private struct PulseSidebar: View {
         List(selection: selection) {
             Section("Рабочее пространство") {
                 ForEach(primary) { destination in
-                    sidebarRow(destination).tag(destination)
+                    sidebarRow(destination).tag(Selection.destination(destination))
                 }
             }
 
@@ -227,6 +190,7 @@ private struct PulseSidebar: View {
                         DisclosureGroup(isExpanded: quarterBinding(group.quarter)) {
                             ForEach(group.projects) { project in
                                 SidebarProjectRow(project: project)
+                                    .tag(Selection.project(project.id))
                             }
                         } label: {
                             HStack(spacing: 7) {
@@ -243,18 +207,13 @@ private struct PulseSidebar: View {
                             }
                         }
                     }
-                    Button {
-                        store.openProjectsList()
-                    } label: {
-                        Label("Все проекты", systemImage: "rectangle.stack")
-                    }
-                    .buttonStyle(.plain)
+
                 }
             }
 
             Section("Библиотека") {
                 ForEach(library) { destination in
-                    sidebarRow(destination).tag(destination)
+                    sidebarRow(destination).tag(Selection.destination(destination))
                 }
             }
         }
@@ -281,6 +240,7 @@ private struct PulseSidebar: View {
     private func badge(for destination: SidebarDestination) -> Int? {
         switch destination {
         case .today: store.urgentTaskCount
+        case .statuses: nil
         case .projects: store.activeProjects.count
         case .overdue: store.overdueTasks.count
         case .archive: store.archivedProjects.count
@@ -302,48 +262,24 @@ private struct PulseSidebar: View {
     }
 }
 
-/// Строка проекта в сайдбаре: системный hover и выделение,
-/// клик по названию — инлайн-переименование.
+/// Выбор проекта принадлежит List: вся строка и клавиши стрелок открывают проект.
 private struct SidebarProjectRow: View {
     @Environment(AppStore.self) private var store
     let project: Project
-    @State private var isHovering = false
-
-    private var isSelected: Bool {
-        store.destination == .projects && store.projectsPresentation == .editor && store.selectedProjectID == project.id
-    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: project.state.symbol)
-                .font(.system(size: 11.5, weight: .medium))
-                .frame(width: 18)
-                .foregroundStyle(project.state.color(palette: store.palette))
-            InlineEditableText(font: .system(size: 13, weight: isSelected ? .medium : .regular),
-                               tooltip: "Клик — переименовать, по строке — открыть",
-                               placeholder: "Проект",
-                               text: project.title) { newTitle in
-                Task { await store.renameProject(project, to: newTitle) }
-            }
+        HStack {
+            Label(project.title, systemImage: project.state.symbol)
+                .lineLimit(1)
             Spacer(minLength: 0)
             if !project.openTasks.isEmpty {
                 Text("\(project.openTasks.count)")
-                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
         }
-        .padding(.vertical, 1)
         .contentShape(Rectangle())
-        .background {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quaternary)
-            } else if isHovering {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.quinary)
-            }
-        }
-        .onTapGesture { store.openProject(project.id) }
-        .onHover { isHovering = $0 }
+        .help(project.title)
         .projectContextMenu(project)
     }
 }

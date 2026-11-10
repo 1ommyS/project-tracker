@@ -18,21 +18,21 @@ struct ProjectContextMenu: View {
     @Environment(AppStore.self) private var store
     let project: Project
     @Binding var confirmDelete: Bool
+    @Binding var showingRename: Bool
 
     var body: some View {
-        Button("Открыть в редакторе", systemImage: "square.and.pencil") {
+        Button("Открыть проект", systemImage: "square.and.pencil") {
             store.openProject(project.id)
         }
+        Button("Переименовать…", systemImage: "pencil") { showingRename = true }
         Divider()
         Picker("Состояние", selection: Binding(
             get: { project.state },
             set: { newState in
-                var value = project
-                value.state = newState
-                Task { await store.saveProject(value) }
+                Task { await store.setProjectState(project, to: newState) }
             }
         )) {
-            ForEach(ProjectState.allCases.filter { $0 != .archived }) { state in
+            ForEach(ProjectState.allCases.filter { $0 != .archived || project.state == .archived }) { state in
                 Label(state.title, systemImage: state.symbol).tag(state)
             }
         }
@@ -72,10 +72,12 @@ private struct ProjectContextMenuModifier: ViewModifier {
     @Environment(AppStore.self) private var store
     let project: Project
     @State private var confirmDelete = false
+    @State private var showingRename = false
 
     func body(content: Content) -> some View {
         content
-            .contextMenu { ProjectContextMenu(project: project, confirmDelete: $confirmDelete) }
+            .contextMenu { ProjectContextMenu(project: project, confirmDelete: $confirmDelete, showingRename: $showingRename) }
+            .sheet(isPresented: $showingRename) { RenameProjectView(project: project) }
             .confirmationDialog("Удалить «\(project.title)»?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Переместить в Корзину", role: .destructive) {
                     Task { await store.delete(project) }

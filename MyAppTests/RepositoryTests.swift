@@ -114,4 +114,51 @@ final class RepositoryTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(updated.folderURL).path.contains("/Projects/\(project.quarter)/"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyFolder.path))
     }
+    func testUnchangedLoadsUseCacheAndSingleStatusEditReadsOneFile() async throws {
+        let project = try await repository.saveProject(makeProject(createdAt: .now))
+        let first = try await repository.saveStatus(DailyStatus(projectID: project.id, date: .now, status: "Первый"), for: project)
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+        _ = try await repository.saveStatus(DailyStatus(projectID: project.id, date: yesterday, status: "Второй"), for: project)
+        _ = try await repository.loadProjects()
+        let cold = await repository.lastLoadMetrics
+        XCTAssertEqual(cold.filesRead, 3)
+        _ = try await repository.loadProjects()
+        let warm = await repository.lastLoadMetrics
+        XCTAssertEqual(warm.filesRead, 0)
+        XCTAssertEqual(warm.cacheHits, 3)
+        var edited = first
+        edited.status = "Обновлено"
+        _ = try await repository.saveStatus(edited, for: project)
+        let loaded = try await repository.loadProjects()
+        let changed = await repository.lastLoadMetrics
+        XCTAssertEqual(changed.filesRead, 1)
+        XCTAssertEqual(changed.cacheHits, 2)
+        XCTAssertEqual(loaded.first?.dailyStatus(on: .now)?.status, "Обновлено")
+    }
+
+    func testExplicitFileEventInvalidatesSameSizeAndTimestampChange() async throws {
+        let project = try await repository.saveProject(makeProject(createdAt: .now))
+        _ = try await repository.loadProjects()
+        let file = try XCTUnwrap(project.folderURL).appendingPathComponent("Project.md")
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        let source = try String(contentsOf: file, encoding: .utf8)
+        try source.replacingOccurrences(of: "Квартальный проект", with: "Квартальный объект").write(to: file, atomically: true, encoding: .utf8)
+        if let date = attributes[.modificationDate] { try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: file.path) }
+        let loaded = try await repository.loadProjects(changedURLs: [file])
+        XCTAssertEqual(loaded.first?.title, "Квартальный объект")
+    }
+
+    func testCacheDropsDeletedStatusAndDoesNotLeakBetweenVaults() async throws {
+        let project = try await repository.saveProject(makeProject(createdAt: .now))
+        let entry = try await repository.saveStatus(DailyStatus(projectID: project.id, date: .now, status: "Запись"), for: project)
+        _ = try await repository.loadProjects()
+        try FileManager.default.removeItem(at: XCTUnwrap(entry.fileURL))
+        let loaded = try await repository.loadProjects()
+        XCTAssertTrue(loaded[0].statuses.isEmpty)
+        let anotherRoot = root.appendingPathComponent("another-vault")
+        await repository.setRootURL(anotherRoot)
+        let other = try await repository.loadProjects()
+        XCTAssertTrue(other.isEmpty)
+    }
+
 }

@@ -103,12 +103,10 @@ struct ProjectStateMenu: View {
         Picker("Состояние", selection: Binding(
             get: { project.state },
             set: { newState in
-                var value = project
-                value.state = newState
-                Task { await store.saveProject(value) }
+                Task { await store.setProjectState(project, to: newState) }
             }
         )) {
-            ForEach(ProjectState.allCases.filter { $0 != .archived }) { state in
+            ForEach(ProjectState.allCases.filter { $0 != .archived || project.state == .archived }) { state in
                 Label(state.title, systemImage: state.symbol).tag(state)
             }
         }
@@ -170,7 +168,7 @@ extension Array where Element == Project {
     /// внутри квартала проекты по свежести обновления.
     func groupedByQuarter() -> [(quarter: String, projects: [Project])] {
         Dictionary(grouping: self, by: \.quarter)
-            .map { (quarter: $0.key, projects: $0.value.sorted { $0.updatedAt > $1.updatedAt }) }
+            .map { (quarter: $0.key, projects: $0.value.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }) }
             .sorted { $0.quarter > $1.quarter }
     }
 }
@@ -205,19 +203,14 @@ struct InlineEditableDate: View {
     }
 
     private func badge(text: String, systemImage: String, color: Color, tapDate: Date) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background {
-                if isHovering {
-                    Capsule().fill(.quinary)
-                } else if color != .secondary {
-                    Capsule().fill(color.opacity(0.09))
-                }
-            }
-            .onTapGesture { start(from: tapDate) }
-            .help("Клик — задать срок и напоминание")
+        Button { start(from: tapDate) } label: {
+            Label(text, systemImage: systemImage)
+                .font(.callout)
+                .foregroundStyle(color)
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.borderless)
+        .help("Задать срок и напоминание")
             .popover(isPresented: $isEditing, arrowEdge: .bottom) { editor }
     }
 
@@ -256,8 +249,8 @@ struct InlineEditableDate: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(18)
-        .frame(width: 276)
+        .padding(PulseMetrics.card)
+        .frame(width: 300)
     }
 
     private func start(from date: Date) {
@@ -291,133 +284,9 @@ struct InlineEditableDate: View {
     }
 }
 
-// MARK: - Инлайн-редактирование текста
+// MARK: - Задачи
 
-/// Клик по тексту превращает его в поле ввода. Return или клик мимо — сохраняет,
-/// Esc — отменяет, пустой ввод откатывается к прежнему значению.
-/// Аффорданс: при наведении появляется плашка и карандаш, в правке — поле с рамкой.
-/// Курсор-стрелка остаётся обычным: I-beam включается только внутри поля,
-/// иначе текст выглядит «выделяемым», а не редактируемым.
-struct InlineEditableText: View {
-    var font: Font = .headline
-    var color: Color = .primary
-    var strikethrough = false
-    var lineLimit: Int? = 1
-    var tooltip: String = "Клик — переименовать"
-    var pencilSize: CGFloat = 10
-    /// Показывает текст как инлайн-Markdown (жирный/курсив/ссылки/код).
-    var markdown = false
-    let placeholder: String
-    let text: String
-    let onCommit: (String) -> Void
-
-    @State private var isEditing = false
-    @State private var draft = ""
-    @State private var isHovering = false
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        Group {
-            if isEditing {
-                editor
-                    .transition(.opacity)
-            } else {
-                display
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: isEditing)
-    }
-
-    // Режим правки: явное поле с подложкой и акцентной рамкой.
-    private var editor: some View {
-        TextField(placeholder, text: $draft, axis: lineLimit == nil ? .vertical : .horizontal)
-            .font(font)
-            .foregroundStyle(color)
-            .textFieldStyle(.plain)
-            .focused($focused)
-            .lineLimit(lineLimit ?? 4)
-            .onSubmit(finish)
-            .onKeyPress(.escape) {
-                cancel()
-                return .handled
-            }
-            .onChange(of: focused) { _, hasFocus in
-                if !hasFocus { finish() }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.quaternary.opacity(0.45)))
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(PulseStyle.blue, lineWidth: 1))
-            .arrowCursorOnExit()
-    }
-
-    // Режим просмотра: наведение подсвечивает плашку и показывает карандаш,
-    // место под карандаш зарезервировано — вёрстка не двигается.
-    private var display: some View {
-        HStack(spacing: 4) {
-            Group {
-                if text.isEmpty {
-                    Text(placeholder)
-                } else if markdown, let rendered = try? AttributedString(
-                    markdown: text,
-                    options: {
-                        var options = AttributedString.MarkdownParsingOptions()
-                        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
-                        return options
-                    }()
-                ) {
-                    Text(rendered)
-                } else {
-                    Text(text)
-                }
-            }
-            .font(font)
-            .foregroundStyle(text.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(color))
-                .strikethrough(strikethrough)
-                .lineLimit(lineLimit)
-                .fixedSize(horizontal: false, vertical: true)
-            Image(systemName: "pencil")
-                .font(.system(size: pencilSize, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .opacity(isHovering && !text.isEmpty ? 1 : 0)
-        }
-        .background {
-            if isHovering {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(.quaternary.opacity(0.55))
-                    .padding(.horizontal, -6)
-                    .padding(.vertical, -3)
-            }
-        }
-        .onTapGesture { start() }
-        .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .help(tooltip)
-        .contentShape(Rectangle())
-    }
-
-    private func start() {
-        draft = text
-        isEditing = true
-        focused = true
-    }
-
-    private func finish() {
-        guard isEditing else { return }
-        isEditing = false
-        if let value = draft.nilIfBlank, value != text {
-            onCommit(value)
-        }
-    }
-
-    private func cancel() {
-        isEditing = false
-    }
-}
-
-/// Строка задачи с проектным контекстом: инлайн-переименование, срок,
-/// ссылка на проект. Общая для «Сегодня» и «Просрочено».
+/// Строка задачи с явным открытием редактора и отдельным чекбоксом.
 struct ContextTaskRow: View {
     @Environment(AppStore.self) private var store
     let context: TaskContext
@@ -433,26 +302,24 @@ struct ContextTaskRow: View {
                     .foregroundStyle(context.task.isDone ? PulseStyle.mint : .secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(context.task.isDone ? "Вернуть задачу в работу" : "Выполнить задачу")
 
             VStack(alignment: .leading, spacing: 2) {
-                InlineEditableText(font: .body,
-                                   lineLimit: nil,
-                                   tooltip: "Клик — переименовать задачу",
-                                   placeholder: "Задача",
-                                   text: context.task.title) { newTitle in
-                    Task { await store.renameTask(context.task, to: newTitle, in: context.project) }
+                Button(context.task.title) {
+                    editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
                 }
+                .buttonStyle(.plain)
+                .font(.body)
                 Button {
                     store.openProject(context.project.id)
                 } label: {
-                    Label(context.project.pathLabel.isEmpty ? context.project.title : context.project.pathLabel,
+                    Label(context.project.title,
                           systemImage: "square.stack.3d.up")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.tint)
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)
-                .pointingHandOnHover()
             }
 
             Spacer(minLength: 8)
@@ -473,21 +340,23 @@ struct ContextTaskRow: View {
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Отметить выполненной", systemImage: "checkmark.circle.fill") {
-                Task { await store.toggleTask(context.task, in: context.project) }
-            }
-            Button("Редактировать…", systemImage: "pencil") {
-                editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
-            }
-            Divider()
-            Button("Удалить", systemImage: "trash", role: .destructive) {
-                Task { await store.deleteTask(context.task, in: context.project) }
-            }
-        }
         .sheet(item: $editor) { context in TaskEditorView(context: context) }
         .taskContextMenu(task: context.task, project: context.project) {
             editor = TaskEditorContext(projectID: context.project.id, taskID: context.task.id)
         }
+    }
+}
+
+/// Быстрый выбор срока с обычным размером системной кнопки.
+struct DayChip: View {
+    let title: String
+    let isSelected: Bool
+    let accent: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(title, action: action)
+            .foregroundStyle(isSelected ? accent : .primary)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

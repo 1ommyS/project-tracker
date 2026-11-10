@@ -16,6 +16,7 @@ struct HighlightingTextField: NSViewRepresentable {
         textView.isEditable = true
         textView.isSelectable = true
         textView.isRichText = false
+        textView.allowsUndo = true
         textView.drawsBackground = false
         textView.backgroundColor = .clear
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
@@ -40,9 +41,12 @@ struct HighlightingTextField: NSViewRepresentable {
 
     func updateNSView(_ textView: NSTextView, context: Context) {
         context.coordinator.parent = self
-        if textView.string != text {
+        if textView.string != text, !textView.hasMarkedText() {
+            let selected = textView.selectedRange()
             textView.string = text
+            textView.setSelectedRange(selected.clamped(to: text.utf16.count))
         }
+        guard !textView.hasMarkedText() else { return }
         context.coordinator.applyHighlight(to: textView, fullText: text, range: highlightRange)
     }
 
@@ -52,6 +56,9 @@ struct HighlightingTextField: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: HighlightingTextField
+        private var previousText: String?
+        private var previousRange: NSRange?
+        private var previousAccent: NSColor?
 
         init(_ parent: HighlightingTextField) {
             self.parent = parent
@@ -74,7 +81,14 @@ struct HighlightingTextField: NSViewRepresentable {
             let length = (fullText as NSString).length
             guard length == (textView.string as NSString).length else { return }
 
+            let highlight = range.map { NSRange($0, in: fullText) }
+            guard previousText != fullText || previousRange != highlight || previousAccent != parent.accent else { return }
             guard let storage = textView.textStorage else { return }
+            previousText = fullText
+            previousRange = highlight
+            previousAccent = parent.accent
+            storage.beginEditing()
+            defer { storage.endEditing() }
             let whole = NSRange(location: 0, length: length)
             let baseFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
             storage.removeAttribute(.foregroundColor, range: whole)

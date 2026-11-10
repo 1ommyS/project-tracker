@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProjectState: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum ProjectState: String, Codable, CaseIterable, Identifiable, Sendable {
     case planned, active, blocked, onHold = "on-hold", done, archived
 
     var id: String { rawValue }
@@ -30,7 +30,7 @@ enum ProjectState: String, Codable, CaseIterable, Identifiable, Sendable {
     var isActive: Bool { self != .archived && self != .done }
 }
 
-struct ProjectTask: Identifiable, Hashable, Sendable {
+nonisolated struct ProjectTask: Identifiable, Hashable, Sendable {
     var id = UUID()
     var title: String
     var isDone: Bool
@@ -40,14 +40,14 @@ struct ProjectTask: Identifiable, Hashable, Sendable {
 }
 
 /// Задача-чекбокс внутри дневного статуса (строка «- [ ] …» в файле).
-struct StatusTask: Identifiable, Hashable, Sendable {
+nonisolated struct StatusTask: Identifiable, Hashable, Sendable {
     var id: Int
     var title: String
     var isDone: Bool
 }
 
 /// Ежедневный статус проекта: короткая заметка на дату + блокеры + чекбоксы.
-struct DailyStatus: Identifiable, Hashable, Sendable {
+nonisolated struct DailyStatus: Identifiable, Hashable, Sendable {
     var id = UUID()
     var projectID: UUID
     var date: Date
@@ -59,14 +59,22 @@ struct DailyStatus: Identifiable, Hashable, Sendable {
     var fileURL: URL? = nil
 }
 
+extension DailyStatus {
+    /// Редактор показывает также чекбоксы, чтобы их можно было менять и удалять.
+    nonisolated var editableMarkdown: String {
+        ([status] + tasks.map { "- [\($0.isDone ? "x" : " ")] \($0.title)" })
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+}
+
 /// Артефакт проекта — гиперссылка (фигма, документ, репозиторий).
-struct ProjectArtifact: Identifiable, Hashable, Sendable {
+nonisolated struct ProjectArtifact: Identifiable, Hashable, Sendable {
     var id = UUID()
     var title: String
     var url: String
 }
 
-struct Project: Identifiable, Hashable, Sendable {
+nonisolated struct Project: Identifiable, Hashable, Sendable {
     var id: UUID
     var title: String
     var epic: String = ""
@@ -108,13 +116,13 @@ struct Project: Identifiable, Hashable, Sendable {
 }
 
 /// Задача вместе с проектом, которому она принадлежит, — для лент «Сегодня» и поиска.
-struct TaskContext: Identifiable, Hashable {
+nonisolated struct TaskContext: Identifiable, Hashable {
     let project: Project
     let task: ProjectTask
     var id: UUID { task.id }
 }
 
-struct SearchHit: Identifiable, Hashable {
+nonisolated struct SearchHit: Identifiable, Hashable {
     enum Kind: String { case project = "Проект", task = "Задача" }
     let id: String
     let projectID: UUID
@@ -125,7 +133,7 @@ struct SearchHit: Identifiable, Hashable {
 }
 
 /// Что открыть в редакторе задачи: новую задачу проекта или существующую.
-struct TaskEditorContext: Identifiable {
+nonisolated struct TaskEditorContext: Identifiable {
     let projectID: UUID
     let taskID: UUID?
     var id: String { "\(projectID.uuidString)-\(taskID?.uuidString ?? "new")" }
@@ -133,7 +141,7 @@ struct TaskEditorContext: Identifiable {
 
 extension Date {
     /// Метка квартала в формате YYQN: октябрь 2026 → «26Q4».
-    var quarterLabel: String {
+    nonisolated var quarterLabel: String {
         let calendar = Calendar.current
         let year = calendar.component(.year, from: self) % 100
         let quarter = (calendar.component(.month, from: self) - 1) / 3 + 1
@@ -143,9 +151,9 @@ extension Date {
 
 extension Project {
     /// Квартал создания — основа папки и фильтра.
-    var quarter: String { createdAt.quarterLabel }
+    nonisolated var quarter: String { createdAt.quarterLabel }
     /// Завершённые проекты живут в подпапке Completed Projects.
-    var isCompleted: Bool { state == .done || state == .archived || isArchived }
+    nonisolated var isCompleted: Bool { state == .done || state == .archived || isArchived }
 }
 
 extension String {

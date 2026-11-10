@@ -192,46 +192,10 @@ extension View {
     /// Ограничивает ширину до контентной колонки — хедер и контент одной ширины.
     func pageWidth() -> some View { frame(maxWidth: PulseMetrics.contentWidth, alignment: .leading) }
 
-    /// Курсор-рука при наведении — для кликабельных карточек и ссылок-строк.
-    /// На выходе дополнительно ставим стрелку: push/pop может разладиться
-    /// с системным I-beam текстовых полей, и курсор «залипает».
-    func pointingHandOnHover() -> some View { modifier(PointingHandHoverModifier()) }
-
-    /// Возврат стрелки при уходе курсора с поля ввода — системный I-beam
-    /// после выхода из SwiftUI-редакторов иногда остаётся висеть.
-    func arrowCursorOnExit() -> some View { modifier(ArrowCursorOnExitModifier()) }
-
     func pulsePanel(radius: CGFloat = PulseStyle.cardRadius) -> some View {
         // Группированная карточка в духе системных inset-секций:
         // без теней и обводок, тихая подложка на фоне окна.
         self
             .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-    }
-}
-
-private struct PointingHandHoverModifier: ViewModifier {
-    @State private var didPush = false
-
-    func body(content: Content) -> some View {
-        content.onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.push()
-                didPush = true
-            } else {
-                if didPush { NSCursor.pop() }
-                didPush = false
-                NSCursor.arrow.set()
-            }
-        }
-    }
-}
-
-private struct ArrowCursorOnExitModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.onHover { hovering in
-            if !hovering {
-                NSCursor.arrow.set()
-            }
-        }
     }
 }

@@ -128,4 +128,51 @@ final class MarkdownCodecTests: XCTestCase {
         XCTAssertEqual(decoded.tasks[0].title, "Одна задача")
         XCTAssertEqual(decoded.status, "", "файлы без секции ## Статус читаются с пустым статусом")
     }
+    func testDailyMarkdownHeadingsAndCodeFencesSurviveRoundTrip() throws {
+        let entry = DailyStatus(projectID: UUID(), date: .now,
+                                status: "## Результат\nТекст\n\n```markdown\n## Блокеры\n- [ ] пример кода\n```\n\n### Дальше\nРабота",
+                                blockers: "## Причина\nЖду ответ")
+        let url = URL(fileURLWithPath: "/tmp/status.md")
+        let decoded = try MarkdownCodec.decodeStatus(MarkdownCodec.encode(status: entry), fileURL: url)
+        XCTAssertEqual(decoded.status, entry.status)
+        XCTAssertEqual(decoded.blockers, entry.blockers)
+        XCTAssertTrue(decoded.tasks.isEmpty)
+    }
+
+    func testLongCodeFenceCanContainShorterFenceAndReservedHeading() throws {
+        let entry = DailyStatus(projectID: UUID(), date: .now,
+                                status: "````markdown\n```\n## Блокеры\n- [ ] пример\n```\n````",
+                                blockers: "Настоящие блокеры")
+        try MarkdownCodec.validate(status: entry)
+        let decoded = try MarkdownCodec.decodeStatus(MarkdownCodec.encode(status: entry), fileURL: URL(fileURLWithPath: "/tmp/status.md"))
+        XCTAssertEqual(decoded.status, entry.status)
+        XCTAssertEqual(decoded.blockers, entry.blockers)
+        XCTAssertTrue(decoded.tasks.isEmpty)
+    }
+
+    func testTaskAndArtifactIdentitySurvivesReloadAndRename() throws {
+        var project = Project(id: UUID(), title: "Идентичность", summary: "", tags: [], state: .active,
+                              tasks: [ProjectTask(title: "Задача", isDone: false)], createdAt: .now, updatedAt: .now,
+                              isArchived: false, artifacts: [ProjectArtifact(title: "Док [v1]", url: "https://example.com")], folderURL: nil)
+        let folder = URL(fileURLWithPath: "/tmp/identities")
+        let first = try MarkdownCodec.decodeProject(MarkdownCodec.encode(project: project), folderURL: folder)
+        XCTAssertEqual(first.tasks[0].id, project.tasks[0].id)
+        XCTAssertEqual(first.artifacts[0].id, project.artifacts[0].id)
+        XCTAssertEqual(first.artifacts[0].title, "Док [v1]")
+        project.tasks[0].title = "Новое название"
+        let renamed = try MarkdownCodec.decodeProject(MarkdownCodec.encode(project: project), folderURL: folder)
+        XCTAssertEqual(renamed.tasks[0].id, first.tasks[0].id)
+    }
+
+    func testLegacyIDsAreStableAndDuplicateTasksStayDistinct() throws {
+        let id = UUID()
+        let source = "---\nid: \(id)\ntitle: \"Старый\"\n---\n## Задачи\n- [ ] Один\n- [ ] Один\n## Артефакты\n- [Ссылка](https://example.com)"
+        let folder = URL(fileURLWithPath: "/tmp/legacy")
+        let first = try MarkdownCodec.decodeProject(source, folderURL: folder)
+        let second = try MarkdownCodec.decodeProject(source, folderURL: folder)
+        XCTAssertEqual(first.tasks.map(\.id), second.tasks.map(\.id))
+        XCTAssertEqual(first.artifacts.map(\.id), second.artifacts.map(\.id))
+        XCTAssertNotEqual(first.tasks[0].id, first.tasks[1].id)
+    }
+
 }

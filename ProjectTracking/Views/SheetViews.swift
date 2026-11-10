@@ -62,7 +62,6 @@ private struct RecentProjectRow: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.title).font(.headline).lineLimit(2)
-                FadeOverflowRow { Text(project.pathLabel).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 10)
             StateBadge(state: project.state)
@@ -73,7 +72,6 @@ private struct RecentProjectRow: View {
         .padding(12)
         .contentShape(Rectangle())
         .pulsePanel(radius: 14)
-        .pointingHandOnHover()
     }
 }
 
@@ -95,15 +93,18 @@ struct ShortcutHelpView: View {
 
     private let groups: [ShortcutGroup] = [
         ShortcutGroup(title: "Навигация", shortcuts: [
+            .init(keys: ["⌘", "6"], title: "Статусы", detail: "Таблица проектов по дням или список полных записей; вид запоминается."),
             .init(keys: ["⌘", "1…5"], title: "Экраны", detail: "Сегодня, Проекты, Просрочено, Поиск и Архив — без мыши."),
             .init(keys: ["⌘", "["], title: "Назад", detail: "Вернуться к предыдущему экрану или проекту, как в браузере."),
             .init(keys: ["⌘", "]"], title: "Вперёд", detail: "Продолжить движение вперёд по истории навигации."),
-            .init(keys: ["↑", "↓"], title: "Список проектов", detail: "В режиме редактора стрелки переключают выбранный проект."),
+            .init(keys: ["↑", "↓"], title: "Список проектов", detail: "В боковой панели стрелки переключают выбранный проект."),
             .init(keys: ["⌘", "E"], title: "Недавние проекты", detail: "Быстро открыть недавно изменённый проект, как Recent Files в IDEA."),
         ]),
         ShortcutGroup(title: "Создание", shortcuts: [
+            .init(keys: ["⌘", "⇧", "S"], title: "Быстрый статус", detail: "Небольшое окно заметки без перехода к проекту; доступно также в строке меню macOS."),
+            .init(keys: ["⌘", "↩"], title: "Сохранить быстрый статус", detail: "Добавить заметку к выбранному дню, сохранив предыдущую запись."),
             .init(keys: ["⌘", "T"], title: "Новая задача", detail: "Открыть редактор задачи для выбранного проекта."),
-            .init(keys: ["⌘", "N"], title: "Новый проект", detail: "Создать новую часть проекта в выбранной иерархии."),
+            .init(keys: ["⌘", "N"], title: "Новый проект", detail: "Создать проект по одному названию."),
             .init(keys: ["↩"], title: "Добавить из поля", detail: "В поле быстрого ввода нажатие Return сразу создаёт задачу."),
         ]),
         ShortcutGroup(title: "Поиск и настройки", shortcuts: [

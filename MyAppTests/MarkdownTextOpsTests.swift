@@ -53,4 +53,27 @@ final class MarkdownTextOpsTests: XCTestCase {
         XCTAssertEqual(NSRange(location: 100, length: 5).clamped(to: 10), NSRange(location: 10, length: 0))
         XCTAssertEqual(NSRange(location: 2, length: 100).clamped(to: 5), NSRange(location: 2, length: 3))
     }
+    func testEmojiSelectionUsesUTF16() {
+        let text = "Привет 👨‍👩‍👧‍👦!"
+        let range = (text as NSString).range(of: "👨‍👩‍👧‍👦")
+        let wrapped = MarkdownTextOps.wrap(text, range: range, marker: "**", placeholder: "")
+        XCTAssertEqual((wrapped.text as NSString).substring(with: wrapped.selection), "👨‍👩‍👧‍👦")
+        let unwrapped = MarkdownTextOps.wrap(wrapped.text, range: wrapped.selection, marker: "**", placeholder: "")
+        XCTAssertEqual(unwrapped.text, text)
+        XCTAssertEqual(unwrapped.selection, range)
+        let link = MarkdownTextOps.insertLink(text, range: range)
+        XCTAssertEqual((link.text as NSString).substring(with: link.selection), "👨‍👩‍👧‍👦")
+    }
+
+    func testPrefixAppliesToEverySelectedLine() {
+        let result = MarkdownTextOps.prefixLine("один\nдва\nтри", range: NSRange(location: 0, length: 9), prefix: "- ")
+        XCTAssertEqual(result.text, "- один\n- два\nтри")
+        XCTAssertEqual((result.text as NSString).substring(with: result.selection), "один\n- два\n")
+    }
+
+    func testMissingAndOverflowingRangesAreClamped() {
+        XCTAssertEqual(NSRange(location: NSNotFound, length: Int.max).clamped(to: 3), NSRange(location: 3, length: 0))
+        XCTAssertEqual(NSRange(location: 1, length: Int.max).clamped(to: 3), NSRange(location: 1, length: 2))
+    }
+
 }

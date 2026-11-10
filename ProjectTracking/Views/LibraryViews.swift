@@ -16,8 +16,7 @@ struct SearchView: View {
                         .textFieldStyle(.plain)
                         .font(.title3)
                         .focused($focused)
-                        .arrowCursorOnExit()
-                    if !store.searchQuery.isEmpty {
+                        if !store.searchQuery.isEmpty {
                         Button { store.searchQuery = "" } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
@@ -82,7 +81,6 @@ private struct SearchResultRow: View {
         }
         .padding(.vertical, 7)
         .contentShape(Rectangle())
-        .pointingHandOnHover()
     }
 
     private var title: some View {
@@ -195,13 +193,9 @@ struct ArchiveView: View {
 
     private func archiveCopy(_ project: Project) -> some View {
         VStack(alignment: .leading) {
-            InlineEditableText(font: .headline,
-                               lineLimit: 2,
-                               placeholder: "Проект",
-                               text: project.title) { newTitle in
-                Task { await store.renameProject(project, to: newTitle) }
-            }
-            Text(project.summary).lineLimit(2).foregroundStyle(.secondary)
+            Button(project.title) { store.openProject(project.id) }
+                .font(.headline)
+                .buttonStyle(.plain)
             HStack(spacing: 6) {
                 QuarterTag(quarter: project.quarter, compact: true)
                 if !project.tasks.isEmpty {
@@ -220,6 +214,7 @@ struct ArchiveView: View {
 }
 
 struct SettingsView: View {
+    @AppStorage("showMenuBarQuickStatus") private var showMenuBarQuickStatus = true
     @Environment(AppStore.self) private var store
     var body: some View {
         @Bindable var store = store
@@ -233,10 +228,11 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 8) { vaultPath; chooseVaultButton }
                         }
                     }
-                    Button("Архивировать хранилище…", systemImage: "doc.zipper") {
+                    Button(store.isArchivingVault ? "Создаю архив…" : "Архивировать хранилище…", systemImage: "doc.zipper") {
                         store.archiveVault()
                     }
                     .buttonStyle(.glass)
+                    if store.isArchivingVault { ProgressView("Архивирование продолжается, можно работать с интерфейсом…") }
                     Text("Выгрузка в rar (если установлен) или zip для безопасной репликации между обновлениями. Данные остаются локальными; можно выбрать корень существующего Obsidian Vault — Trace создаст внутри папку Projects.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -257,6 +253,14 @@ struct SettingsView: View {
                         }
                     }
                     if store.notifications.authorization == .allowed {
+                        LabeledContent("В расписании", value: "\(store.notifications.pendingCount)")
+                        if let next = store.notifications.nextReminder {
+                            LabeledContent("Ближайшее", value: RuDate.dayMonthTime(next))
+                        }
+                        if !store.notifications.alertsEnabled {
+                            Text("Баннеры выключены в macOS. Включите уведомления Trace в Системных настройках.")
+                                .foregroundStyle(.orange)
+                        }
                         Button("Отправить тестовое напоминание", systemImage: "bell.badge") {
                             Task { await store.notifications.sendTestNotification() }
                         }
@@ -274,11 +278,24 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.glass)
                     }
+                    Button("Настройки уведомлений macOS…", systemImage: "gear") {
+                        store.notifications.openSystemSettings()
+                    }
+                    Button("Обновить диагностику", systemImage: "arrow.clockwise") {
+                        Task { await store.notifications.refreshDiagnostics() }
+                    }
+                    if let error = store.notifications.scheduleError { Text(error).foregroundStyle(.red) }
                     if let message = store.notifications.statusMessage {
                         Text(message).font(.caption).foregroundStyle(.secondary)
                     }
                     Text("Напоминание приходит в срок задачи. Нажатие открывает проект, а кнопка «Выполнено» прямо в уведомлении закрывает задачу. Всё локально и без интернета.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Быстрый ввод") {
+                    Toggle("Показывать быстрый статус в строке меню macOS", isOn: $showMenuBarQuickStatus)
+                    Text("Откройте небольшое окно из строки меню, даже когда Trace не активен. В приложении — ⌘⇧S; сохранить заметку — ⌘↩.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    OpenStatusGuideButton()
                 }
                 Section("Конфиденциальность") {
                     Label("Нет аккаунтов, аналитики, телеметрии и сетевой синхронизации", systemImage: "lock.shield.fill")
@@ -290,6 +307,7 @@ struct SettingsView: View {
             .softScrollFade()
         }
         .navigationTitle("Настройки")
+        .task { await store.notifications.refreshDiagnostics() }
     }
 
     private var vaultPath: some View {
@@ -297,7 +315,7 @@ struct SettingsView: View {
     }
 
     private var chooseVaultButton: some View {
-        Button("Выбрать…") { Task { await store.chooseVault() } }.buttonStyle(.glass)
+        Button("Выбрать…") { Task { await store.chooseVault() } }.buttonStyle(.glass).disabled(store.isArchivingVault)
     }
 }
 

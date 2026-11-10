@@ -15,206 +15,193 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    enum Event: Sendable {
-        case openProject(UUID)
-        case completeTask(projectID: UUID, taskID: UUID)
-    }
-
-    private enum Constants {
-        static let categoryID = "pulseboard.task"
-        static let completeAction = "pulseboard.task.complete"
-        static let idPrefix = "pulseboard.task."
-    }
-
+    typealias Event = NotificationPlan.Action
     private(set) var authorization: Authorization = .unknown
-    /// Диагностическое сообщение для настроек: что пошло не так или когда придёт тестовый баннер.
     private(set) var statusMessage: String?
+    private(set) var scheduleError: String?
+    private(set) var pendingCount = 0
+    private(set) var nextReminder: Date?
+    private(set) var alertsEnabled = false
+    private(set) var soundsEnabled = false
     private var isActivated = false
     private var lastProjects: [Project] = []
+    private let client: NotificationClient
+    private let now: () -> Date
+    private let calendar: Calendar
+    private var syncTask: Task<Void, Never>?
+    private var syncRevision = 0
+    private var lastAppliedInput: [UUID: NotificationPlan.Input]?
+    private var lastSyncDate = Date.distantPast
+    private var lastSyncTimeZone = ""
+    private var testTask: Task<Void, Never>?
     var onEvent: (@MainActor (Event) -> Void)?
 
-    private var center: UNUserNotificationCenter { UNUserNotificationCenter.current() }
+    override convenience init() { self.init(client: SystemNotificationClient()) }
 
-    // MARK: - Активация
+    init(client: NotificationClient, now: @escaping () -> Date = { .now }, calendar: Calendar = .current) {
+        self.client = client
+        self.now = now
+        self.calendar = calendar
+        super.init()
+    }
 
-    /// Делегат подключаем лениво: обращение к центру из init приложения
-    /// на части сборок macOS приводит к пропаданию уведомлений.
     func activate() {
         guard !isActivated else { return }
         isActivated = true
-        center.delegate = self
-        let complete = UNNotificationAction(identifier: Constants.completeAction, title: "Выполнено")
-        center.setNotificationCategories([
-            UNNotificationCategory(identifier: Constants.categoryID, actions: [complete], intentIdentifiers: [])
-        ])
-        // Разрешение могли выдать в Системных настройках, пока приложение
-        // было свёрнуто, — при активации окна тихо пересобираем расписание.
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
+        client.activate(delegate: self)
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, !self.lastProjects.isEmpty else { return }
+                guard let self else { return }
                 await self.syncIfAllowed(projects: self.lastProjects)
             }
         }
         notificationLogger.info("Notification center activated")
     }
 
-    // MARK: - Разрешение
-
     func refreshAuthorization() async {
-        let settings = await center.notificationSettings()
-        switch settings.authorizationStatus {
+        let permission = await client.permission()
+        switch permission.authorization {
         case .authorized, .provisional, .ephemeral: authorization = .allowed
         case .denied: authorization = .denied
         default: authorization = .unknown
         }
+        alertsEnabled = permission.alerts == .enabled
+        soundsEnabled = permission.sounds == .enabled
     }
 
     func requestAccess() async {
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
-            notificationLogger.info("Authorization finished, granted=\(granted, privacy: .public)")
-        } catch {
-            notificationLogger.error("Authorization failed: \(error.localizedDescription, privacy: .public)")
-        }
+        activate()
+        do { _ = try await client.requestAccess() }
+        catch { statusMessage = "Не удалось запросить разрешение: \(error.localizedDescription)" }
         await refreshAuthorization()
     }
 
-    /// Спрашивает разрешение, если система ещё не спрашивала, и перестраивает напоминания.
     func authorizeAndSync(projects: [Project]) async {
         activate()
+        lastProjects = projects
         await refreshAuthorization()
         if authorization == .unknown { await requestAccess() }
-        guard authorization == .allowed else {
-            statusMessage = authorization == .denied
-                ? "Уведомления выключены в Системных настройках → Уведомления → Trace."
-                : nil
-            return
-        }
+        if authorization == .denied { statusMessage = "Уведомления выключены в Системных настройках → Уведомления → Trace." }
         await sync(projects: projects)
     }
 
-    /// Тихая пересинхронизация без запроса разрешения.
-    func syncIfAllowed(projects: [Project]) async {
+    func syncIfAllowed(projects: [Project]) async { await sync(projects: projects, force: false) }
+
+    /// Superseded queued work is skipped; explicit diagnostics can force a refresh.
+    func sync(projects: [Project], force: Bool = true) async {
         activate()
-        await refreshAuthorization()
-        guard authorization == .allowed else { return }
-        await sync(projects: projects)
-    }
-
-    // MARK: - Расписание
-
-    func sync(projects: [Project]) async {
         lastProjects = projects
-        var requests: [String: UNNotificationRequest] = [:]
-        for project in projects where !project.isArchived {
-            for task in project.tasks where !task.isDone {
-                guard let dueDate = task.dueDate, dueDate > .now else { continue }
-                let fireDate = reminderDate(for: dueDate)
-                let content = UNMutableNotificationContent()
-                content.title = "Пора выполнить задачу"
-                content.subtitle = project.pathLabel.isEmpty ? project.title : project.pathLabel
-                content.body = task.title
-                content.sound = .default
-                content.threadIdentifier = project.id.uuidString
-                content.categoryIdentifier = Constants.categoryID
-                content.userInfo = ["projectID": project.id.uuidString, "taskID": task.id.uuidString]
-                let trigger = UNCalendarNotificationTrigger(
-                    dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate),
-                    repeats: false
-                )
-                requests[task.notificationID] = UNNotificationRequest(identifier: task.notificationID, content: content, trigger: trigger)
+        syncRevision &+= 1
+        let revision = syncRevision
+        let previous = syncTask
+        let input = NotificationPlan.inputSignature(projects: projects)
+        let task = Task { @MainActor in
+            if let previous { await previous.value }
+            guard revision == syncRevision else { return }
+            await refreshAuthorization()
+            guard revision == syncRevision else { return }
+            guard authorization == .allowed else {
+                pendingCount = 0; nextReminder = nil; lastAppliedInput = nil
+                return
+            }
+            if !force, input == lastAppliedInput, now().timeIntervalSince(lastSyncDate) < 30,
+               calendar.timeZone.identifier == lastSyncTimeZone { return }
+            await performSync(projects: projects, revision: revision)
+            if revision == syncRevision, scheduleError == nil {
+                lastAppliedInput = input
+                lastSyncDate = now()
+                lastSyncTimeZone = calendar.timeZone.identifier
             }
         }
+        syncTask = task
+        await task.value
+    }
 
-        // Добавление запроса с существующим идентификатором заменяет его,
-        // поэтому сносим только устаревшие — без сброса всего расписания.
-        let pending = await center.pendingNotificationRequests()
-        let stale = pending.map(\.identifier).filter { $0.hasPrefix(Constants.idPrefix) && requests[$0] == nil }
-        if !stale.isEmpty { center.removePendingNotificationRequests(withIdentifiers: stale) }
-
+    private func performSync(projects: [Project], revision: Int) async {
+        let requests = NotificationPlan.requests(projects: projects, now: now(), calendar: calendar)
+        let ids = Set(requests.map(\.identifier))
+        let pending = await client.pending()
+        guard revision == syncRevision else { return }
+        let stale = pending.map(\.identifier).filter { $0.hasPrefix(NotificationPlan.idPrefix) && !ids.contains($0) }
+        client.removePending(stale)
+        // Keep delivered overdue reminders actionable; remove completed/deleted ones.
+        let openIDs = Set(projects.filter { !$0.isCompleted }.flatMap { $0.openTasks.map(\.notificationID) })
+        let delivered = await client.deliveredIDs()
+        guard revision == syncRevision else { return }
+        client.removeDelivered(delivered.filter { $0.hasPrefix(NotificationPlan.idPrefix) && !openIDs.contains($0) })
+        let existing = Dictionary(pending.map { ($0.identifier, $0) }, uniquingKeysWith: { a, _ in a })
         var failures = 0
-        for request in requests.values.sorted(by: { $0.identifier < $1.identifier }) {
-            do {
-                try await center.add(request)
-            } catch {
+        for request in requests {
+            guard revision == syncRevision else { return }
+            if let old = existing[request.identifier], old.content.isEqual(request.content),
+               let oldTrigger = old.trigger, let newTrigger = request.trigger, oldTrigger.isEqual(newTrigger) { continue }
+            do { try await client.add(request) }
+            catch {
                 failures += 1
                 notificationLogger.error("Schedule failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-        statusMessage = failures == 0 ? nil : "Не удалось запланировать \(failures) из \(requests.count) напоминаний."
-        notificationLogger.info("Sync done: scheduled=\(requests.count, privacy: .public), removed=\(stale.count, privacy: .public), failed=\(failures, privacy: .public)")
+        scheduleError = failures == 0 ? nil : "Не удалось запланировать \(failures) из \(requests.count) напоминаний."
+        await refreshDiagnostics()
+        notificationLogger.info("Sync done: scheduled=\(self.pendingCount, privacy: .public), failed=\(failures, privacy: .public)")
     }
 
-    /// «Весь день» (23:59) напоминаем утром в 9:00, если утро ещё впереди.
-    private func reminderDate(for dueDate: Date) -> Date {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.hour, .minute], from: dueDate)
-        guard components.hour == 23, components.minute == 59,
-              let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: dueDate),
-              morning > .now else { return dueDate }
-        return morning
+    func refreshDiagnostics() async {
+        await refreshAuthorization()
+        let requests = await client.pending().filter { $0.identifier.hasPrefix(NotificationPlan.idPrefix) }
+        pendingCount = requests.count
+        nextReminder = requests.compactMap { ($0.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() }.min()
     }
 
-    /// Открывает системную панель «Уведомления» — единственный путь
-    /// включить их, если запрос был отклонён.
     func openSystemSettings() {
-        activate()
-        let pane = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
-        guard let url = URL(string: pane) else { return }
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
         NSWorkspace.shared.open(url)
-        statusMessage = "Открыты Системные настройки → Уведомления — включите уведомления для Trace."
-        notificationLogger.info("Opened notification system settings pane")
     }
 
-    // MARK: - Диагностика
-
-    /// Тестовый баннер через 5 секунд — мгновенная проверка доставки.
     func sendTestNotification() async {
         activate()
         await refreshAuthorization()
         guard authorization == .allowed else {
-            statusMessage = "Сначала разрешите уведомления — кнопка выше или Системные настройки."
+            statusMessage = "Сначала разрешите уведомления в Системных настройках."
             return
         }
+        testTask?.cancel()
+        client.removeDelivered(["pulseboard.test"])
         let content = UNMutableNotificationContent()
-        content.title = "Проверка напоминаний"
-        content.body = "Если вы видите этот баннер — напоминания о задачах работают."
+        content.title = "Проверка напоминаний Trace"
+        content.body = "Тест локального уведомления. Напоминания о задачах используют то же разрешение."
         content.sound = .default
-        let request = UNNotificationRequest(
-            identifier: "pulseboard.test",
-            content: content,
-            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
-        )
+        let request = UNNotificationRequest(identifier: "pulseboard.test", content: content,
+                                             trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false))
         do {
-            try await center.add(request)
-            statusMessage = "Тестовое напоминание придёт через 5 секунд."
-        } catch {
-            statusMessage = "Тест не удалось запланировать: \(error.localizedDescription)"
+            try await client.add(request)
+            statusMessage = "Тест запланирован через 5 секунд. Проверяю доставку…"
+            testTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(7))
+                guard !Task.isCancelled, let self else { return }
+                await checkTestDelivery()
+            }
+        } catch { statusMessage = "Тест не удалось запланировать: \(error.localizedDescription)" }
+    }
+
+    func checkTestDelivery() async {
+        let delivered = await client.deliveredIDs()
+        if delivered.contains("pulseboard.test") {
+            statusMessage = "macOS доставила тестовое уведомление. Если баннер не появился, проверьте «Фокусирование» и стиль уведомлений Trace."
+        } else {
+            statusMessage = "Доставка теста пока не подтверждена. Проверьте Центр уведомлений, «Фокусирование» и настройки Trace; удалённый баннер уже не виден диагностике."
         }
     }
 
-    // MARK: - UNUserNotificationCenterDelegate
-
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                             willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+                                           willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                             didReceive response: UNNotificationResponse) async {
-        let info = response.notification.request.content.userInfo
-        guard let projectID = (info["projectID"] as? String).flatMap(UUID.init(uuidString:)) else { return }
-        let taskID = (info["taskID"] as? String).flatMap(UUID.init(uuidString:))
-        let event: Event
-        if response.actionIdentifier == Constants.completeAction, let taskID {
-            event = .completeTask(projectID: projectID, taskID: taskID)
-        } else {
-            event = .openProject(projectID)
-        }
-        Task { @MainActor [weak self] in self?.onEvent?(event) }
+                                           didReceive response: UNNotificationResponse) async {
+        guard let event = NotificationPlan.action(identifier: response.actionIdentifier,
+                                                   userInfo: response.notification.request.content.userInfo) else { return }
+        await MainActor.run { onEvent?(event) }
     }
 }

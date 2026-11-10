@@ -3,11 +3,12 @@ import Foundation
 import Observation
 
 enum SidebarDestination: String, CaseIterable, Identifiable {
-    case today, projects, overdue, search, archive, settings
+    case today, statuses, projects, overdue, search, archive, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .today: "Сегодня"
+        case .statuses: "Статусы"
         case .projects: "Проекты"
         case .overdue: "Просрочено"
         case .search: "Поиск"
@@ -18,6 +19,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .today: "sun.max.fill"
+        case .statuses: "tablecells"
         case .projects: "square.stack.3d.up.fill"
         case .overdue: "clock.badge.exclamationmark"
         case .search: "magnifyingglass"
@@ -49,7 +51,15 @@ enum ProjectsPresentation: String {
 
 @MainActor @Observable
 final class AppStore {
-    var projects: [Project] = []
+    var projects: [Project] = [] { didSet { projectsRevision &+= 1 } }
+    private(set) var projectsRevision = 0
+    @ObservationIgnored private var cachedOverview: (revision: Int, value: ProjectOverview)?
+    var overview: ProjectOverview {
+        if let cachedOverview, cachedOverview.revision == projectsRevision { return cachedOverview.value }
+        let value = ProjectOverview(projects: projects)
+        cachedOverview = (projectsRevision, value)
+        return value
+    }
     var destination: SidebarDestination = .today { didSet { pushNavigation() } }
     var selectedProjectID: UUID? { didSet { pushNavigation() } }
     var projectsPresentation: ProjectsPresentation = .feed { didSet { pushNavigation() } }
@@ -62,6 +72,25 @@ final class AppStore {
     var quickTaskRequest = 0
     var whatsNewRequest = 0
     var quickTaskProjectID: UUID?
+    let quickStatusDraft = QuickStatusDraft()
+    @ObservationIgnored var openMainWindow: (() -> Void)?
+    private var hasStarted = false
+    private var clockMinute = Int(Date.now.timeIntervalSince1970 / 60)
+    @ObservationIgnored private var clockTask: Task<Void, Never>?
+    @ObservationIgnored private var cachedAgenda: (revision: Int, minute: Int, zone: String, value: TaskAgendaSnapshot)?
+    var taskAgenda: TaskAgendaSnapshot {
+        let minute = Int(Date.now.timeIntervalSince1970 / 60)
+        _ = clockMinute // invalidates the cached projection while the app stays open
+        let zone = Calendar.current.timeZone.identifier
+        if let cachedAgenda, cachedAgenda.revision == projectsRevision, cachedAgenda.minute == minute, cachedAgenda.zone == zone {
+            return cachedAgenda.value
+        }
+        let value = TaskAgendaSnapshot(tasks: allOpenTasks, now: .now)
+        cachedAgenda = (projectsRevision, minute, zone, value)
+        return value
+    }
+    private var hasLoaded = false
+    private var pendingNotificationEvents: [NotificationService.Event] = []
     var theme: AppTheme {
         didSet { UserDefaults.standard.set(theme.rawValue, forKey: Keys.theme) }
     }
@@ -72,18 +101,19 @@ final class AppStore {
         didSet { UserDefaults.standard.set(interfaceMode.rawValue, forKey: Keys.interfaceMode) }
     }
     private(set) var vaultURL: URL
-    let notifications = NotificationService()
+    let notifications: NotificationService
 
     private var repository: MarkdownRepository
     private let monitor = VaultMonitor()
     private var scopedURL: URL?
-    private var selfWriteUntil = Date.distantPast
+    var isArchivingVault = false
 
     convenience init() {
         self.init(vaultURL: Self.resolveStoredVault() ?? Self.defaultVaultURL)
     }
 
-    init(vaultURL: URL) {
+    init(vaultURL: URL, notificationService: NotificationService? = nil) {
+        notifications = notificationService ?? NotificationService()
         theme = AppTheme(rawValue: UserDefaults.standard.string(forKey: Keys.theme) ?? "system") ?? .system
         palette = AppPalette(rawValue: UserDefaults.standard.string(forKey: Keys.palette) ?? "") ?? .blue
         interfaceMode = InterfaceMode(rawValue: UserDefaults.standard.string(forKey: Keys.interfaceMode) ?? "") ?? .detailed
@@ -92,6 +122,7 @@ final class AppStore {
         if vaultURL.startAccessingSecurityScopedResource() { scopedURL = vaultURL }
         notifications.onEvent = { [weak self] event in self?.handle(event) }
         applyDemoEnvironment()
+        pushNavigation()
     }
 
     /// Демо-переменные окружения — выставляют стартовое состояние приложения
@@ -106,30 +137,13 @@ final class AppStore {
         if env["TRACE_MODE"] == "focused" { interfaceMode = .focused }
     }
 
-    var activeProjects: [Project] { projects.filter { !$0.isArchived && $0.state != .archived && $0.state != .done } }
-    var archivedProjects: [Project] { projects.filter { $0.isArchived || $0.state == .archived || $0.state == .done } }
-    var selectedProject: Project? { projects.first { $0.id == selectedProjectID } }
+    var activeProjects: [Project] { overview.active }
+    var archivedProjects: [Project] { overview.archived }
+    var selectedProject: Project? { selectedProjectID.flatMap { overview.byID[$0] } }
+    var allOpenTasks: [TaskContext] { overview.openTasks }
 
-    var allOpenTasks: [TaskContext] {
-        activeProjects.flatMap { project in project.openTasks.map { TaskContext(project: project, task: $0) } }
-    }
-
-    /// Все просроченные открытые задачи, самые старые сверху.
-    var overdueTasks: [TaskContext] {
-        allOpenTasks
-            .filter { context in context.task.dueDate.map { $0 < .now } ?? false }
-            .sorted { ($0.task.dueDate ?? .distantPast) < ($1.task.dueDate ?? .distantPast) }
-    }
-
-    /// Просроченные и назначенные на сегодня — для бейджа «Сегодня».
-    var urgentTaskCount: Int {
-        let calendar = Calendar.current
-        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now)) ?? .now
-        return allOpenTasks.filter { context in
-            guard let due = context.task.dueDate else { return false }
-            return due < endOfToday
-        }.count
-    }
+    var overdueTasks: [TaskContext] { taskAgenda.overdue }
+    var urgentTaskCount: Int { taskAgenda.urgentCount }
 
     func openSearch() {
         destination = .search
@@ -162,18 +176,16 @@ final class AppStore {
     }
 
     func open(_ destination: SidebarDestination) {
+        if destination == .projects { openProjectsList(); return }
         self.destination = destination
     }
 
     func openProject(_ id: UUID) {
-        selectedProjectID = id
-        projectsPresentation = .editor
-        destination = .projects
+        navigate(to: NavigationState(destination: .projects, projectID: id, presentation: .editor))
     }
 
     func openProjectsList() {
-        projectsPresentation = .feed
-        destination = .projects
+        navigate(to: NavigationState(destination: .projects, projectID: nil, presentation: .feed))
     }
 
     // MARK: - История навигации
@@ -211,9 +223,16 @@ final class AppStore {
         isRestoringNavigation = false
     }
 
+    private func navigate(to state: NavigationState) {
+        restoreNavigation(state)
+        pushNavigation()
+    }
+
     private func pushNavigation() {
         guard !isRestoringNavigation else { return }
-        let state = NavigationState(destination: destination, projectID: selectedProjectID, presentation: projectsPresentation)
+        let isProject = destination == .projects && projectsPresentation == .editor
+        let state = NavigationState(destination: destination, projectID: isProject ? selectedProjectID : nil,
+                                    presentation: isProject ? .editor : .feed)
         if navigationIndex >= 0, navigationHistory[navigationIndex] == state { return }
         navigationHistory.removeSubrange(min(navigationIndex + 1, navigationHistory.count)...)
         navigationHistory.append(state)
@@ -226,49 +245,66 @@ final class AppStore {
             errorMessage = "Сначала создайте проект, чтобы добавить задачу."
             return
         }
-        selectedProjectID = project.id
-        destination = .projects
+        openProject(project.id)
         quickTaskProjectID = project.id
         quickTaskRequest &+= 1
     }
 
     func start() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+        clockTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                self.clockMinute = Int(Date.now.timeIntervalSince1970 / 60)
+            }
+        }
         await reload()
         if ProcessInfo.processInfo.environment["TRACE_SELECT"] == "1", selectedProjectID == nil {
             selectedProjectID = projects.first?.id
         }
         observeVault(at: vaultURL)
         presentWhatsNewIfVersionChanged()
-        // Разрешение спрашиваем при каждом запуске: сначала штатный запрос,
-        // а если разрешения нет — уводим в Системные настройки уведомлений.
-        await notifications.authorizeAndSync(projects: projects)
-        if notifications.authorization != .allowed {
-            // Центр уведомлений на старте процесса может отдавать
-            // устаревший notDetermined — переспрашиваем с паузой.
-            try? await Task.sleep(for: .milliseconds(600))
-            await notifications.refreshAuthorization()
-        }
-        if notifications.authorization != .allowed {
-            notifications.openSystemSettings()
-        }
+        // Запуск только читает разрешение. Запрос — при добавлении напоминания
+        // или явном действии в настройках, без открытия Системных настроек.
+        await notifications.syncIfAllowed(projects: projects)
     }
 
-    func reload(showSpinner: Bool = true) async {
+    func reload(showSpinner: Bool = true, changedURLs: Set<URL> = []) async {
         if showSpinner { isLoading = true }
+        for pending in pendingWrites.values { _ = await pending.value }
         do {
-            projects = try await repository.loadProjects()
-            // Холостое присваивание nil→nil попало бы в историю навигации.
-            if selectedProjectID == nil, let first = projects.first?.id {
-                selectedProjectID = first
+            let oldSchedule = NotificationPlan.inputSignature(projects: projects)
+            var revision: Int
+            var loaded: [Project]
+            var invalidated = changedURLs
+            // Wait for a coherent snapshot without blocking the main thread.
+            repeat {
+                revision = projectsRevision
+                loaded = try await repository.loadProjects(changedURLs: invalidated)
+                invalidated = []
+            } while projectsRevision != revision
+            let incoming = Dictionary(loaded.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let existingIDs = Set(projects.map(\.id))
+            let stable = projects.compactMap { incoming[$0.id] } + loaded.filter { !existingIDs.contains($0.id) }
+            if projects != stable { projects = stable }
+            if oldSchedule != NotificationPlan.inputSignature(projects: stable), notifications.authorization == .allowed {
+                await notifications.syncIfAllowed(projects: stable)
+            }
+            if let selectedProjectID, !projects.contains(where: { $0.id == selectedProjectID }) {
+                self.selectedProjectID = nil
             }
             errorMessage = nil
         } catch {
             errorMessage = "Не удалось прочитать хранилище: \(error.localizedDescription)"
         }
         isLoading = false
-        if notifications.authorization == .allowed {
-            await notifications.sync(projects: projects)
-        }
+        hasLoaded = true
+        let pendingEvents = pendingNotificationEvents
+        pendingNotificationEvents.removeAll()
+        for event in pendingEvents { handle(event) }
     }
 
     func createProject(title: String, epic: String, parentProject: String, summary: String, tags: [String], state: ProjectState) async -> Project? {
@@ -277,183 +313,279 @@ final class AppStore {
                               tasks: [], createdAt: .now, updatedAt: .now,
                               isArchived: false, folderURL: nil)
         do {
-            markSelfWrite()
             let saved = try await repository.saveProject(project)
             replace(saved)
-            selectedProjectID = saved.id
-            destination = .projects
+            openProject(saved.id)
             return saved
         } catch { errorMessage = error.localizedDescription; return nil }
     }
 
-    func saveProject(_ project: Project) async {
-        var value = project
-        value.updatedAt = .now
-        let previous = projects.first(where: { $0.id == project.id })
-        do {
-            markSelfWrite()
-            let saved = try await repository.saveProject(value)
-            replace(saved)
-            let tasksChanged = previous?.tasks != saved.tasks || previous?.isArchived != saved.isArchived
-            if tasksChanged {
-                if saved.tasks.contains(where: { !$0.isDone && $0.dueDate != nil }) {
-                    await notifications.authorizeAndSync(projects: projects)
-                } else {
-                    await notifications.syncIfAllowed(projects: projects)
-                }
+    // Все записи одного проекта сериализуются, включая статусы и перенос папки.
+    // Изменения применяются к свежей модели после предыдущей записи, а не к копии из View.
+    private var pendingWrites: [UUID: Task<Bool, Never>] = [:]
+    private var deletingProjects: Set<UUID> = []
+
+    private enum WriteError: LocalizedError {
+        case missingTask, missingArtifact
+        var errorDescription: String? {
+            switch self {
+            case .missingTask: "Задача уже удалена или изменена в хранилище. Откройте её заново."
+            case .missingArtifact: "Ссылка уже удалена из проекта. Добавьте её заново."
             }
-        } catch { errorMessage = "Не удалось сохранить проект: \(error.localizedDescription)" }
+        }
+    }
+
+    @discardableResult
+    private func enqueueWrite(for id: UUID,
+                              operation: @escaping @MainActor (Project) async throws -> Project) async -> Bool {
+        guard !deletingProjects.contains(id) else { return false }
+        let previous = pendingWrites[id]
+        let task = Task { @MainActor in
+            if let previous { _ = await previous.value }
+            guard let current = projects.first(where: { $0.id == id }) else {
+                errorMessage = "Проект больше не доступен в хранилище."
+                return false
+            }
+            do {
+                let saved = try await operation(current)
+                replace(saved)
+                return true
+            } catch {
+                errorMessage = "Не удалось сохранить проект: \(error.localizedDescription)"
+                return false
+            }
+        }
+        pendingWrites[id] = task
+        return await task.value
+    }
+
+    @discardableResult
+    private func updateProject(_ id: UUID, change: @escaping @MainActor (inout Project) throws -> Void) async -> Bool {
+        var tasksChanged = false
+        let saved = await enqueueWrite(for: id) { current in
+            var value = current
+            try change(&value)
+            guard value != current else { return current }
+            value.updatedAt = .now
+            tasksChanged = NotificationPlan.inputSignature(projects: [current]) != NotificationPlan.inputSignature(projects: [value])
+            return try await self.repository.saveProject(value)
+        }
+        if saved, tasksChanged {
+            Task { await notifications.syncIfAllowed(projects: projects) }
+        }
+        return saved
+    }
+
+    @discardableResult
+    func saveProject(_ project: Project) async -> Bool {
+        await updateProject(project.id) { value in
+            // Статусы записываются отдельно; полная копия проекта не должна их откатывать.
+            let statuses = value.statuses
+            let folder = value.folderURL
+            value = project
+            value.statuses = statuses
+            value.folderURL = folder
+        }
+    }
+
+    func setProjectState(_ project: Project, to state: ProjectState) async {
+        await updateProject(project.id) { $0.state = state; $0.isArchived = state == .archived }
     }
 
     // MARK: - Задачи
 
-    func addTask(title: String, dueDate: Date?, to project: Project) async {
-        var value = project
-        value.tasks.append(ProjectTask(title: title, isDone: false, dueDate: dueDate))
-        await saveProject(value)
+    @discardableResult
+    func addTask(title: String, dueDate: Date?, to project: Project) async -> Bool {
+        guard let title = title.nilIfBlank else { return false }
+        let saved = await updateProject(project.id) {
+            $0.tasks.append(ProjectTask(title: title, isDone: false, dueDate: dueDate))
+        }
+        if saved, dueDate != nil { await notifications.authorizeAndSync(projects: projects) }
+        return saved
     }
 
     func toggleTask(_ task: ProjectTask, in project: Project) async {
-        var value = task
-        value.isDone.toggle()
-        await updateTask(value, in: project)
+        await updateProject(project.id) { value in
+            guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+            value.tasks[index].isDone.toggle()
+        }
     }
 
-    func updateTask(_ task: ProjectTask, in project: Project) async {
-        var value = project
-        guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { return }
-        value.tasks[index] = task
-        await saveProject(value)
+    @discardableResult
+    func updateTask(_ task: ProjectTask, in project: Project) async -> Bool {
+        let saved = await updateProject(project.id) { value in
+            guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { throw WriteError.missingTask }
+            value.tasks[index] = task
+        }
+        if saved, !task.isDone, task.dueDate != nil { await notifications.authorizeAndSync(projects: projects) }
+        return saved
     }
 
-    func deleteTask(_ task: ProjectTask, in project: Project) async {
-        var value = project
-        value.tasks.removeAll { $0.id == task.id }
-        await saveProject(value)
+    @discardableResult
+    func deleteTask(_ task: ProjectTask, in project: Project) async -> Bool {
+        await updateProject(project.id) { $0.tasks.removeAll { $0.id == task.id } }
     }
 
     func duplicateTask(_ task: ProjectTask, in project: Project) async {
-        var value = project
-        let copy = ProjectTask(title: task.title, isDone: task.isDone, dueDate: task.dueDate)
-        if let index = value.tasks.firstIndex(where: { $0.id == task.id }) {
-            value.tasks.insert(copy, at: index + 1)
-        } else {
-            value.tasks.append(copy)
+        await updateProject(project.id) { value in
+            let copy = ProjectTask(title: task.title, isDone: task.isDone, dueDate: task.dueDate)
+            let index = value.tasks.firstIndex(where: { $0.id == task.id }).map { $0 + 1 } ?? value.tasks.count
+            value.tasks.insert(copy, at: index)
         }
-        await saveProject(value)
     }
 
     // MARK: - Артефакты
 
-    func addArtifact(title: String, url: String, to project: Project) async {
-        guard let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
-              isValidArtifactURL(trimmedURL) else { return }
-        var value = project
-        value.artifacts.append(ProjectArtifact(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? trimmedURL,
-            url: trimmedURL
-        ))
-        await saveProject(value)
+    @discardableResult
+    func saveArtifact(id: UUID? = nil, title: String, url: String, in project: Project) async -> Bool {
+        let link: ArtifactLink
+        do { link = try ArtifactLink(title: title, url: url) }
+        catch { errorMessage = error.localizedDescription; return false }
+        return await updateProject(project.id) { value in
+            if let id {
+                guard let index = value.artifacts.firstIndex(where: { $0.id == id }) else { throw WriteError.missingArtifact }
+                value.artifacts[index].title = link.title
+                value.artifacts[index].url = link.url
+            } else {
+                value.artifacts.append(ProjectArtifact(title: link.title, url: link.url))
+            }
+        }
     }
 
-    private func isValidArtifactURL(_ value: String) -> Bool {
-        guard let url = URL(string: value) else { return false }
-        return url.scheme != nil || value.contains(".")
+    func addArtifact(title: String, url: String, to project: Project) async {
+        await saveArtifact(title: title, url: url, in: project)
     }
 
     func removeArtifact(_ artifact: ProjectArtifact, from project: Project) async {
-        var value = project
-        value.artifacts.removeAll { $0.id == artifact.id }
-        await saveProject(value)
+        await updateProject(project.id) { $0.artifacts.removeAll { $0.id == artifact.id } }
     }
 
     // MARK: - Инлайн-переименование
 
     /// Правка дневного статуса: text/blockers = nil — не трогаем, пустая строка — очищает.
-    func setDailyStatus(text: String?, blockers: String?, for project: Project, on date: Date) async {
-        let calendar = Calendar.current
-        let day = calendar.startOfDay(for: date)
-        var value = project
-        var entry = value.statuses.first { calendar.isDate($0.date, inSameDayAs: day) }
-            ?? DailyStatus(id: UUID(), projectID: value.id, date: day)
-        if let text { entry.status = text.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let blockers { entry.blockers = blockers.trimmingCharacters(in: .whitespacesAndNewlines) }
-        await upsert(entry, in: &value)
+    @discardableResult
+    func setDailyStatus(text: String?, blockers: String?, for project: Project, on date: Date,
+                        replacesTasks: Bool = false) async -> Bool {
+        await enqueueWrite(for: project.id) { current in
+            let calendar = Calendar.current
+            let day = calendar.startOfDay(for: date)
+            var entry = current.dailyStatus(on: day)
+                ?? DailyStatus(projectID: current.id, date: day)
+            if let text {
+                entry.status = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if replacesTasks { entry.tasks = [] }
+            }
+            if let blockers { entry.blockers = blockers.trimmingCharacters(in: .whitespacesAndNewlines) }
+            entry.updatedAt = .now
+            let saved = try await self.repository.saveStatus(entry, for: current)
+            var value = current
+            value.statuses.removeAll { calendar.isDate($0.date, inSameDayAs: day) }
+            value.statuses.append(saved)
+            value.statuses.sort { $0.date > $1.date }
+            return value
+        }
+    }
+
+    func prepareQuickStatus() {
+        guard !quickStatusDraft.isSaving, quickStatusDraft.text.nilIfBlank == nil else { return }
+        if !activeProjects.contains(where: { $0.id == quickStatusDraft.projectID }) {
+            quickStatusDraft.projectID = selectedProject.flatMap { $0.isCompleted ? nil : $0.id } ?? activeProjects.first?.id
+        }
+        quickStatusDraft.day = .now
+        quickStatusDraft.error = nil
+    }
+
+    @discardableResult
+    func saveQuickStatus() async -> Bool {
+        guard !quickStatusDraft.isSaving else { return false }
+        guard let id = quickStatusDraft.projectID else { quickStatusDraft.error = "Выберите проект."; return false }
+        let transfer: StatusTransfer
+        do { transfer = try StatusTransfer.parse(quickStatusDraft.text) }
+        catch { quickStatusDraft.error = error.localizedDescription; return false }
+        let day = quickStatusDraft.day
+        quickStatusDraft.isSaving = true
+        defer { quickStatusDraft.isSaving = false }
+        let saved = await appendDailyStatus(transfer, projectID: id, on: day)
+        if saved { quickStatusDraft.text = ""; quickStatusDraft.error = nil }
+        else { quickStatusDraft.error = errorMessage ?? "Не удалось добавить статус." }
+        return saved
+    }
+
+    @discardableResult
+    func appendDailyStatus(_ transfer: StatusTransfer, projectID: UUID, on date: Date) async -> Bool {
+        await enqueueWrite(for: projectID) { current in
+            var entry = current.dailyStatus(on: date)
+                ?? DailyStatus(projectID: current.id, date: Calendar.current.startOfDay(for: date))
+            entry.status = [entry.editableMarkdown, transfer.status].filter { $0.nilIfBlank != nil }.joined(separator: "\n\n")
+            entry.tasks = []
+            entry.blockers = [entry.blockers, transfer.blockers].filter { $0.nilIfBlank != nil }.joined(separator: "\n\n")
+            entry.updatedAt = .now
+            let saved = try await self.repository.saveStatus(entry, for: current)
+            var value = current
+            value.statuses.removeAll { Calendar.current.isDate($0.date, inSameDayAs: date) }
+            value.statuses.append(saved)
+            value.statuses.sort { $0.date > $1.date }
+            return value
+        }
     }
 
     func toggleStatusTask(_ task: StatusTask, in status: DailyStatus, for project: Project) async {
-        var entry = status
-        guard entry.tasks.indices.contains(task.id) else { return }
-        entry.tasks[task.id].isDone.toggle()
-        entry.updatedAt = .now
-        var value = project
-        await upsert(entry, in: &value)
-    }
-
-    private func upsert(_ entry: DailyStatus, in project: inout Project) async {
-        do {
-            markSelfWrite()
-            let saved = try await repository.saveStatus(entry, for: project)
-            if let index = project.statuses.firstIndex(where: { $0.id == saved.id }) {
-                project.statuses[index] = saved
-            } else {
-                project.statuses.append(saved)
-            }
-            project.statuses.sort { $0.date > $1.date }
-            replace(project)
-        } catch {
-            errorMessage = "Не удалось сохранить статус: \(error.localizedDescription)"
+        await enqueueWrite(for: project.id) { current in
+            guard var entry = current.statuses.first(where: { $0.id == status.id }),
+                  let index = entry.tasks.firstIndex(where: { $0.id == task.id }) else { return current }
+            entry.tasks[index].isDone.toggle()
+            entry.updatedAt = .now
+            let saved = try await self.repository.saveStatus(entry, for: current)
+            var value = current
+            if let index = value.statuses.firstIndex(where: { $0.id == saved.id }) { value.statuses[index] = saved }
+            return value
         }
     }
 
     func setProjectStatus(_ project: Project, to status: String) async {
-        let trimmed = status.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != project.status.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-        var value = project
-        value.status = trimmed
-        await saveProject(value)
+        await updateProject(project.id) { $0.status = status.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
-    func renameProject(_ project: Project, to newTitle: String) async {
-        guard let title = newTitle.nilIfBlank, title != project.title else { return }
-        var value = project
-        value.title = title
-        await saveProject(value)
+    @discardableResult
+    func renameProject(_ project: Project, to newTitle: String) async -> Bool {
+        guard let title = newTitle.nilIfBlank else { return false }
+        return await updateProject(project.id) { $0.title = title }
     }
 
     func renameTask(_ task: ProjectTask, to newTitle: String, in project: Project) async {
         guard let title = newTitle.nilIfBlank, title != task.title else { return }
-        var value = task
-        value.title = title
-        await updateTask(value, in: project)
+        await updateProject(project.id) { value in
+            guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+            value.tasks[index].title = title
+        }
     }
 
     func setTaskDueDate(_ task: ProjectTask, to date: Date?, in project: Project) async {
-        var value = task
-        value.dueDate = date
-        await updateTask(value, in: project)
+        let saved = await updateProject(project.id) { value in
+            guard let index = value.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+            value.tasks[index].dueDate = date
+        }
+        if saved, date != nil { await notifications.authorizeAndSync(projects: projects) }
     }
 
     func archive(_ project: Project) async {
-        var value = project
-        value.isArchived = true
-        value.state = .archived
-        await saveProject(value)
+        await updateProject(project.id) { $0.isArchived = true; $0.state = .archived }
     }
 
     func restore(_ project: Project) async {
-        var value = project
-        value.isArchived = false
-        value.state = .active
-        await saveProject(value)
+        await updateProject(project.id) { $0.isArchived = false; $0.state = .active }
     }
 
     func delete(_ project: Project) async {
+        guard deletingProjects.insert(project.id).inserted else { return }
+        defer { deletingProjects.remove(project.id) }
+        if let pending = pendingWrites[project.id] { _ = await pending.value }
+        guard let current = projects.first(where: { $0.id == project.id }) else { return }
         do {
-            markSelfWrite()
-            try await repository.deleteProject(project)
+            try await repository.deleteProject(current)
             projects.removeAll { $0.id == project.id }
-            if selectedProjectID == project.id { selectedProjectID = projects.first?.id }
+            pendingWrites.removeValue(forKey: project.id)
+            if selectedProjectID == project.id { openProjectsList() }
             await notifications.syncIfAllowed(projects: projects)
         } catch { errorMessage = "Не удалось переместить проект в Корзину: \(error.localizedDescription)" }
     }
@@ -465,32 +597,25 @@ final class AppStore {
         panel.title = "Архив хранилища"
         panel.message = "Выгрузить текущее хранилище для репликации"
         let stamp = "trace-vault-" + Date.now.formatted(.iso8601.year().month().day())
-        panel.nameFieldStringValue = "trace-vault-\(stamp)"
+        panel.nameFieldStringValue = stamp
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let output = url.deletingPathExtension()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [
-            Bundle.main.url(forResource: "archive-vault", withExtension: "sh")?.path
-                ?? "scripts/archive-vault.sh",
-            vaultURL.path,
-            output.path
-        ]
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus == 0 {
-                errorMessage = nil
-            } else {
-                errorMessage = "Не удалось создать архив (код \(process.terminationStatus))."
-            }
-        } catch {
-            errorMessage = "Не удалось запустить архивацию: \(error.localizedDescription)"
+        guard !isArchivingVault else { return }
+        let script = Bundle.main.url(forResource: "archive-vault", withExtension: "sh")
+            ?? URL(fileURLWithPath: "scripts/archive-vault.sh")
+        isArchivingVault = true
+        Task {
+            defer { isArchivingVault = false }
+            do {
+                for pending in pendingWrites.values { _ = await pending.value }
+                try await repository.archiveVault(using: script, output: output)
+            } catch { errorMessage = error.localizedDescription }
         }
     }
 
     func chooseVault() async {
+        guard !isArchivingVault else { return }
         let panel = NSOpenPanel()
         panel.title = "Выберите папку или Obsidian Vault"
         panel.prompt = "Использовать"
@@ -500,10 +625,16 @@ final class AppStore {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            for pending in pendingWrites.values { _ = await pending.value }
+            pendingWrites.removeAll()
             UserDefaults.standard.set(bookmark, forKey: Keys.bookmark)
             scopedURL?.stopAccessingSecurityScopedResource()
-            if url.startAccessingSecurityScopedResource() { scopedURL = url }
+            scopedURL = url.startAccessingSecurityScopedResource() ? url : nil
             vaultURL = url
+            navigate(to: NavigationState(destination: .today, projectID: nil, presentation: .feed))
+            navigationHistory.removeAll()
+            navigationIndex = -1
+            pushNavigation()
             await repository.setRootURL(url)
             await reload()
             observeVault(at: url)
@@ -524,21 +655,30 @@ final class AppStore {
             }
             for task in project.tasks where task.title.range(of: needle, options: options) != nil {
                 result.append(SearchHit(id: "task-\(task.id)", projectID: project.id, kind: .task,
-                                        title: task.title, excerpt: project.pathLabel.isEmpty ? project.title : project.pathLabel,
+                                        title: task.title, excerpt: project.title,
                                         date: task.dueDate ?? project.updatedAt))
             }
         }
         return result.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
-    private func handle(_ event: NotificationService.Event) {
+    func handle(_ event: NotificationService.Event) {
+        guard hasLoaded else { pendingNotificationEvents.append(event); return }
         switch event {
         case .openProject(let id):
+            guard projects.contains(where: { $0.id == id }) else { return }
             openProject(id)
+            openMainWindow?()
         case .completeTask(let projectID, let taskID):
-            guard let project = projects.first(where: { $0.id == projectID }),
-                  let task = project.tasks.first(where: { $0.id == taskID }) else { return }
-            Task { await toggleTask(task, in: project) }
+            Task { await completeTaskFromNotification(projectID: projectID, taskID: taskID) }
+        }
+    }
+
+    @discardableResult
+    func completeTaskFromNotification(projectID: UUID, taskID: UUID) async -> Bool {
+        await updateProject(projectID) { value in
+            guard let index = value.tasks.firstIndex(where: { $0.id == taskID }) else { throw WriteError.missingTask }
+            value.tasks[index].isDone = true
         }
     }
 
@@ -556,18 +696,16 @@ final class AppStore {
         // автосохранении дёргает списки и сбивает фокус в поле ввода.
         // Порядок отображения задают экранные вычисления, с диска — reload().
         if let index = projects.firstIndex(where: { $0.id == project.id }) {
-            projects[index] = project
+            if projects[index] != project { projects[index] = project }
         } else {
             projects.append(project)
         }
     }
 
-    private func markSelfWrite() { selfWriteUntil = Date().addingTimeInterval(1.2) }
-
     private func observeVault(at url: URL) {
-        monitor.start(url: url) { [weak self] in
-            guard let self, Date() > self.selfWriteUntil else { return }
-            Task { await self.reload(showSpinner: false) }
+        monitor.start(url: url) { [weak self] changed in
+            guard let self else { return }
+            Task { await self.reload(showSpinner: false, changedURLs: changed) }
         }
     }
 

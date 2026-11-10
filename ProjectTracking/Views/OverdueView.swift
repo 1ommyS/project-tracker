@@ -6,6 +6,7 @@ import SwiftUI
 struct OverdueView: View {
     @Environment(AppStore.self) private var store
     @State private var selectedDay: Date?
+    @State private var taskEditor: TaskEditorContext?
 
     private var groups: [(project: Project, tasks: [ProjectTask])] {
         var byProject: [UUID: (Project, [ProjectTask])] = [:]
@@ -48,6 +49,7 @@ struct OverdueView: View {
             }
         }
         .navigationTitle("Просрочено")
+        .sheet(item: $taskEditor) { context in TaskEditorView(context: context) }
     }
 
     // MARK: - Гистограмма просрочек по дням
@@ -196,8 +198,7 @@ struct OverdueView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .pointingHandOnHover()
-            .help("Открыть проект в редакторе")
+                .help("Открыть проект в редакторе")
 
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(tasks) { task in
@@ -223,13 +224,11 @@ struct OverdueView: View {
             .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 2) {
-                InlineEditableText(font: .body,
-                                   lineLimit: nil,
-                                   tooltip: "Клик — переименовать задачу",
-                                   placeholder: "Задача",
-                                   text: task.title) { newTitle in
-                    Task { await store.renameTask(task, to: newTitle, in: project) }
+                Button(task.title) {
+                    taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id)
                 }
+                .buttonStyle(.plain)
+                .font(.body)
                 Text(overdueText(for: task))
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -243,7 +242,9 @@ struct OverdueView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .taskContextMenu(task: task, project: project)
+        .taskContextMenu(task: task, project: project) {
+            taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id)
+        }
     }
 
     private var worstOverdueDays: Int {

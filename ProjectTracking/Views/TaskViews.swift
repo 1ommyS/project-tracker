@@ -6,9 +6,7 @@ struct TaskRowView: View {
     let task: ProjectTask
     let onToggle: () -> Void
     let onEdit: () -> Void
-    let onRename: (String) -> Void
     let onSetDate: (Date?) -> Void
-    var onDelete: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -18,16 +16,18 @@ struct TaskRowView: View {
                     .foregroundStyle(task.isDone ? PulseStyle.mint : .secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(task.isDone ? "Вернуть задачу в работу" : "Выполнить задачу")
             .padding(.top, 1)
 
-            InlineEditableText(font: .body,
-                               color: task.isDone ? .secondary : .primary,
-                               strikethrough: task.isDone,
-                               lineLimit: nil,
-                               tooltip: "Клик — переименовать задачу",
-                               placeholder: "Задача",
-                               text: task.title,
-                               onCommit: onRename)
+            Button(action: onEdit) {
+                Text(task.title)
+                    .font(.body)
+                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                    .strikethrough(task.isDone)
+                    .multilineTextAlignment(.leading)
+            }
+            .buttonStyle(.plain)
+            .help("Редактировать задачу")
 
             Spacer(minLength: 8)
 
@@ -60,7 +60,6 @@ struct TaskListSection: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(project.openTasks) { task in
                 row(task)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if project.openTasks.isEmpty && !project.doneTasks.isEmpty {
                 Label("Все задачи выполнены", systemImage: "checkmark.seal.fill")
@@ -85,20 +84,17 @@ struct TaskListSection: View {
                 .foregroundStyle(.secondary)
             }
             QuickTaskComposer { title, dueDate in
-                Task { await store.addTask(title: title, dueDate: dueDate, to: project) }
+                await store.addTask(title: title, dueDate: dueDate, to: project)
             }
         }
         .sheet(item: $taskEditor) { context in TaskEditorView(context: context) }
-        .animation(.snappy, value: project.tasks.map(\.id))
     }
 
     private func row(_ task: ProjectTask) -> some View {
         TaskRowView(task: task,
                     onToggle: { Task { await store.toggleTask(task, in: project) } },
                     onEdit: { taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id) },
-                    onRename: { newTitle in Task { await store.renameTask(task, to: newTitle, in: project) } },
-                    onSetDate: { newDate in Task { await store.setTaskDueDate(task, to: newDate, in: project) } },
-                    onDelete: { Task { await store.deleteTask(task, in: project) } })
+                    onSetDate: { newDate in Task { await store.setTaskDueDate(task, to: newDate, in: project) } })
             .taskContextMenu(task: task, project: project) {
                 taskEditor = TaskEditorContext(projectID: project.id, taskID: task.id)
             }
@@ -109,54 +105,48 @@ struct TaskListSection: View {
 
 struct QuickTaskComposer: View {
     @Environment(AppStore.self) private var store
-    var onAdd: (String, Date?) -> Void
+    var onAdd: (String, Date?) async -> Bool
     @State private var text = ""
-
-    private var parsed: ParsedInput { TaskInputParser.parseDetailed(text) }
+    @State private var isAdding = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.tint)
-                .font(.title3)
-            ZStack(alignment: .leading) {
-                if text.isEmpty {
-                    Text("Новая задача — например: «Позвонить завтра 18:00»")
-                        .foregroundStyle(.tertiary)
-                        .allowsHitTesting(false)
-                }
-                HighlightingTextField(text: $text,
-                                      highlightRange: parsed.highlightRange,
-                                      accent: NSColor(store.palette.color),
-                                      onSubmit: add)
-                    .frame(height: 20)
+        let parsed = TaskInputParser.parseDetailed(text)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").foregroundStyle(.tint)
+                HighlightingTextField(text: $text, highlightRange: parsed.highlightRange,
+                                      accent: NSColor(store.palette.color), onSubmit: add)
+                    .frame(height: 22)
+                    .overlay(alignment: .leading) {
+                        if text.isEmpty {
+                            Text("Новая задача, например: позвонить завтра 18:00")
+                                .foregroundStyle(.tertiary).lineLimit(1).allowsHitTesting(false)
+                        }
+                    }
+                Button("Добавить", action: add)
+                    .disabled(parsed.title.isEmpty || isAdding)
             }
-            if let date = parsed.dueDate {
-                Label(RuDate.dayMonthTime(date), systemImage: "bell.badge.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.tint)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.tint.opacity(0.1), in: Capsule())
-                    .help("Распознанный срок: слова «сегодня», «завтра», дата «25.12» и время «18:30» превращаются в напоминание.")
-                    .transition(.opacity.combined(with: .scale))
-            }
-            if text.nilIfBlank != nil {
-                Button("Добавить", systemImage: "plus", action: add)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(parsed.title.isEmpty)
-                    .transition(.opacity)
-            }
+            Text(parsed.dueDate.map { "Напоминание: " + RuDate.dayMonthTime($0) } ?? "Срок можно указать прямо в тексте")
+                .font(.caption).foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(height: 18, alignment: .leading)
         }
         .padding(12)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .animation(.snappy, value: text)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+        .disabled(isAdding)
     }
 
     private func add() {
-        let value = parsed
+        let value = TaskInputParser.parseDetailed(text)
         guard !value.title.isEmpty else { return }
-        onAdd(value.title, value.dueDate)
-        text = ""
+        guard !isAdding else { return }
+        let submitted = text
+        isAdding = true
+        Task {
+            let saved = await onAdd(value.title, value.dueDate)
+            if saved, text == submitted { text = "" }
+            isAdding = false
+        }
     }
 }
 
@@ -168,6 +158,8 @@ struct TaskEditorView: View {
     let context: TaskEditorContext
 
     @State private var hydrated = false
+    @State private var isSaving = false
+    @State private var saveError: String?
     @State private var existingTask: ProjectTask?
     @State private var title = ""
     @State private var isDone = false
@@ -197,7 +189,7 @@ struct TaskEditorView: View {
                     Section("Проект") {
                         Picker("Проект", selection: $projectID) {
                             ForEach(store.activeProjects) { project in
-                                Text(project.pathLabel).tag(project.id)
+                                Text(project.title).tag(project.id)
                             }
                         }
                         .labelsHidden()
@@ -205,10 +197,10 @@ struct TaskEditorView: View {
                 }
                 Section("Задача") {
                     TextField("Что нужно сделать?", text: $title, axis: .vertical)
-                        .lineLimit(1...3)
+                        .lineLimit(3)
+                        .frame(height: 64, alignment: .top)
                         .font(.title3.weight(.medium))
-                        .arrowCursorOnExit()
-                    if existingTask != nil {
+                        if existingTask != nil {
                         Toggle("Выполнена", isOn: $isDone)
                     }
                 }
@@ -226,9 +218,7 @@ struct TaskEditorView: View {
                                 applyPreset(daysAhead: 7)
                             }
                         }
-                        .padding(4)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.separator.opacity(0.35)))
+
                         DatePicker("Дата и время", selection: $dueDate)
                     }
                     if store.notifications.authorization != .allowed {
@@ -250,13 +240,18 @@ struct TaskEditorView: View {
             .scrollContentBackground(.hidden)
 
             Divider()
+            if let saveError { Text(saveError).foregroundStyle(.red).padding(.horizontal, PulseMetrics.screen) }
 
             HStack {
                 if existingTask != nil {
                     Button("Удалить задачу", role: .destructive) {
                         Task {
-                            await store.deleteTask(existingTask!, in: store.projects.first { $0.id == context.projectID }!)
-                            dismiss()
+                            guard let task = existingTask,
+                                  let project = store.projects.first(where: { $0.id == context.projectID }) else { return }
+                            isSaving = true
+                            if await store.deleteTask(task, in: project) { dismiss() }
+                            else { saveError = store.errorMessage }
+                            isSaving = false
                         }
                     }
                 }
@@ -265,12 +260,15 @@ struct TaskEditorView: View {
                 Button("Сохранить") { save() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(title.nilIfBlank == nil || (existingTask == nil && store.projects.first { $0.id == projectID } == nil))
+                    .disabled(title.nilIfBlank == nil || (context.taskID != nil && existingTask == nil)
+                              || store.projects.first { $0.id == projectID } == nil)
             }
             .padding(PulseMetrics.screen)
         }
         .frame(minWidth: 440, idealWidth: 560, maxWidth: 680, minHeight: 400, idealHeight: 480, maxHeight: 640)
         .onAppear(perform: hydrate)
+        .disabled(isSaving)
+        .interactiveDismissDisabled()
     }
 
     private func hydrate() {
@@ -279,9 +277,12 @@ struct TaskEditorView: View {
         if store.projects.first(where: { $0.id == projectID }) == nil, let fallback = store.activeProjects.first {
             projectID = fallback.id
         }
-        guard let taskID = context.taskID,
-              let project = store.projects.first(where: { $0.id == context.projectID }),
-              let task = project.tasks.first(where: { $0.id == taskID }) else { return }
+        guard let taskID = context.taskID else { return }
+        guard let project = store.projects.first(where: { $0.id == context.projectID }),
+              let task = project.tasks.first(where: { $0.id == taskID }) else {
+            saveError = "Задача больше не доступна. Откройте её заново из проекта."
+            return
+        }
         existingTask = task
         title = task.title
         isDone = task.isDone
@@ -309,16 +310,20 @@ struct TaskEditorView: View {
         let due = hasDueDate ? dueDate : nil
         let targetProjectID = existingTask == nil ? projectID : context.projectID
         guard let project = store.projects.first(where: { $0.id == targetProjectID }) else { return }
+        isSaving = true
         Task {
+            let saved: Bool
             if var task = existingTask {
                 task.title = title
                 task.isDone = isDone
                 task.dueDate = due
-                await store.updateTask(task, in: project)
+                saved = await store.updateTask(task, in: project)
             } else {
-                await store.addTask(title: title, dueDate: due, to: project)
+                saved = await store.addTask(title: title, dueDate: due, to: project)
             }
-            dismiss()
+            isSaving = false
+            if saved { dismiss() }
+            else { saveError = store.errorMessage ?? "Не удалось сохранить задачу." }
         }
     }
 
